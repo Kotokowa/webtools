@@ -1,0 +1,11 @@
+{
+  "name": "kotokowa-webtools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Small browser tools, including portable NFC content decoding",
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "engines": { "node": ">=22" }
+}

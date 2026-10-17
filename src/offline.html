@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>卡里的小小世界</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,"Microsoft YaHei",sans-serif;background:#09131d;color:#e5f0f5}*{box-sizing:border-box}body{margin:0;padding:24px 16px 48px}main{max-width:680px;margin:auto}h1{font-size:22px;font-weight:600;margin:12px 0}header p{font-size:13px;color:#92a8b8;line-height:1.7}article{background:#10212e;border:1px solid #233d4d;border-radius:22px;padding:24px 20px;margin:24px 0}#avatar{white-space:pre;font-family:"Courier New",monospace;font-variant-ligatures:none;line-height:1.08;margin:8px auto 30px;width:max-content}#message{white-space:pre-wrap;font-size:16px;line-height:1.95}a{color:#66ccff;text-underline-offset:5px}#website{display:inline-block;margin-top:18px}details{margin-top:28px;font-size:13px;color:#9fb4c2}summary{cursor:pointer}textarea{display:block;width:100%;height:110px;margin:16px 0;background:#0b1924;color:#dcebf5;border:1px solid #345063;border-radius:10px;padding:12px;resize:vertical}button{background:#66ccff;border:0;border-radius:10px;padding:10px 20px;color:#0b2534;font:inherit;cursor:pointer}#status{font-size:14px;line-height:1.7;color:#a8c6d8;overflow-wrap:anywhere}[hidden]{display:none!important}@media(max-width:420px){article{padding:18px 12px}body{padding:16px 12px}}
+</style></head><body><main>
+<header><h1>卡里的小小世界</h1><p>头像和留言来自卡片中的链接。这个页面负责把它们展开。</p></header>
+<p id="status" role="status">请打开卡片链接，或在下面粘贴链接进行备份解码。</p>
+<article id="card" hidden><pre id="avatar" aria-label="由字符8组成的头像"></pre><div id="message"></div><a id="website" target="_blank" rel="noopener noreferrer">来我的网页玩</a></article>
+<details id="manual"><summary>备份解码 · 粘贴卡片链接</summary><p>保存本 HTML 文件后，可以离线打开并粘贴完整链接。无需安装插件。</p><textarea id="input" spellcheck="false" aria-label="卡片完整链接或井号后的编码" placeholder="粘贴完整链接或 # 后的编码"></textarea><button id="decode" type="button">展开内容</button></details>
+</main><script>
+/*__BROTLI__*/
+/*__CODEC__*/
+function fitAvatar() {
+  const available = document.getElementById('card').clientWidth - (innerWidth <= 420 ? 24 : 40);
+  document.getElementById('avatar').style.fontSize = Math.min(13.5, Math.max(4, available / (64 * 0.601))) + 'px';
+}
+function show(input) {
+  const status = document.getElementById('status');
+  const card = document.getElementById('card');
+  try {
+    const data = decodeCard(input);
+    const pre = document.getElementById('avatar');
+    pre.replaceChildren(); pre.style.color = data.color;
+    for (let y = 0; y < data.rows.length; y++) {
+      for (let x = 0; x < data.rows[y].length; x++) {
+        if (data.accent[y][x]) {
+          const span = document.createElement('span'); span.style.color = data.accentColor; span.textContent = data.rows[y][x]; pre.append(span);
+        } else pre.append(document.createTextNode(data.rows[y][x]));
+      }
+      if (y < data.rows.length - 1) pre.append(document.createTextNode('\n'));
+    }
+    document.getElementById('message').textContent = data.message;
+    document.getElementById('website').href = data.website;
+    card.hidden = false; status.textContent = ''; fitAvatar();
+  } catch (error) {
+    card.hidden = true; status.textContent = '未能展开：' + String(error.message || error);
+    document.getElementById('manual').open = true;
+  }
+}
+document.getElementById('decode').onclick = () => show(document.getElementById('input').value);
+addEventListener('resize', fitAvatar);
+addEventListener('hashchange', () => show(location.hash));
+if (location.hash.length > 1) show(location.hash);
+else document.getElementById('manual').open = true;
+</script></body></html>
