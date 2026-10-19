@@ -1,0 +1,20 @@
+.cropper .crop-file-label{margin:24px 0 12px;padding:18px;border:1px dashed #97b9ce;border-radius:12px;background:#f7fafc;color:#243746}
+.cropper input[type=file]{display:block;margin-top:12px;width:100%;min-width:0;font-size:14px}
+.cropper .crop-info{font-size:13px;overflow-wrap:anywhere}
+.cropper .crop-help{font-size:13px}
+.cropper button:disabled{opacity:.45;cursor:default;filter:none}
+.crop-panes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin:20px 0}
+.crop-panes .panel{padding:16px;min-width:0}
+.crop-panes h2{font-size:16px}
+.crop-stage{height:360px;background:repeating-conic-gradient(#f0f4f7 0% 25%,#fff 0% 50%) 0/20px 20px;border-radius:10px;overflow:hidden}
+.crop-stage canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
+.crop-stage canvas:focus-visible{outline:2px solid #176b98;outline-offset:-2px}
+.crop-preview-stage{display:flex;align-items:center;justify-content:center;padding:16px}
+.crop-preview-stage canvas{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;cursor:default}
+.crop-empty{text-align:center;font-size:14px;padding:20px}
+.crop-coordinates{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding-bottom:24px}
+.crop-coordinate{background:#f7fafc;padding:12px;border-radius:10px}
+.crop-coordinate span{font-size:14px;font-weight:600}
+.crop-coordinate label{display:flex;align-items:center;gap:8px;margin-top:8px}
+.crop-coordinate input{width:100%;min-width:0;border:1px solid #b5cbd9;border-radius:6px;padding:6px;background:#fff;color:#243746}
+@media(max-width:700px){.crop-panes{grid-template-columns:minmax(0,1fr)}.crop-coordinates{grid-template-columns:repeat(2,minmax(0,1fr))}.cropper .toolbar select{width:100%}}

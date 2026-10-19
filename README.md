@@ -6,6 +6,15 @@ A small static toolbox, published at https://kotokowa.github.io/webtools/.
   website from an 8A v2/v3 URL fragment. Payloads stay in the fragment and are
   decoded in the browser. No analytics, remote libraries or personal fixtures.
 - **Text encoders:** UTF-8 Base64, URL component encoding and hexadecimal.
+- **Perspective cropper:** select four corners in any order, drag to refine,
+  preview rectification and download a full-resolution PNG/JPG at
+  [`?tool=perspective`](https://kotokowa.github.io/webtools/?tool=perspective).
+  Ported from `perspective_cropper.py` to local browser processing, with cubic
+  interpolation and no runtime dependencies. Supports file selection, drop,
+  paste, numeric coordinates, undo and keyboard shortcuts. Downloads a new
+  `_processed` file. Browser-supported JPG/PNG/WebP/BMP inputs only; convert
+  TIFF to PNG first. Inputs are limited to 24 megapixels / 50 MB / 10000 pixels
+  per side. The preview is reduced; exports use the selected original pixels.
 - **Water Wave Lab:** FCD checkerboard surface reconstruction at
   [`water-wave/`](https://kotokowa.github.io/webtools/water-wave/). Import image
   sequences/folders/video, reuse ROI/line/point JSON records, and export

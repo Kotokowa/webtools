@@ -3,7 +3,8 @@
 const TOOLS = [
   { id: 'nfc', name: 'NFC 卡片解码', tag: '8A · v2 / v3', description: '从卡片链接还原字符头像、颜色和完整留言。也可以下载一份离线解码器。', mount: mountNfc },
   { id: 'text', name: '文本编码转换', tag: 'UTF-8 · 浏览器本地', description: '在文字、Base64、URL 编码和十六进制之间转换，支持中文。', mount: mountText },
-  { id: 'water-wave', name: '水波场恢复', tag: 'FCD · Python 科学计算', description: '从参考棋盘格与动态影像恢复水面高度，框选范围并导出波场、剖面与时间序列。', mount: () => { location.href = 'water-wave/'; } }
+  { id: 'water-wave', name: '水波场恢复', tag: 'FCD · Python 科学计算', description: '从参考棋盘格与动态影像恢复水面高度，框选范围并导出波场、剖面与时间序列。', mount: () => { location.href = 'water-wave/'; } },
+  { id: 'perspective', name: '图片透视裁剪', tag: '四角校正 · 浏览器本地', description: '选出照片中的四个角，拖动微调，将倾斜画面校正为矩形并下载。', mount: mountPerspective }
 ];
 const app = document.getElementById('app');
 function el(tag, options = {}, children = []) {
@@ -100,13 +101,15 @@ function mountText() {
   panel.append(format, el('label', { for: 'text-input', text: '输入' }), input, el('div', { class: 'toolbar' }, [encode, decode]), el('label', { for: 'text-output', text: '结果' }), output, copy, status);
   app.append(panel);
 }
+let unmountTool = null;
 function route() {
+  if (unmountTool) { unmountTool(); unmountTool = null; }
   window.onresize = null;
   // Raw fragment is a permanent, short NFC entry point. Do not repurpose it.
   if (location.hash.length > 1) return mountNfc(location.hash);
   const tool = new URLSearchParams(location.search).get('tool');
   const entry = TOOLS.find(t => t.id === tool);
-  if (entry) entry.mount(); else mountHome();
+  if (entry) unmountTool = entry.mount(); else mountHome();
 }
 addEventListener('hashchange', route);
 route();
