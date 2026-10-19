@@ -2,7 +2,8 @@
 // fragment route reserved for 8A cards so existing physical tags stay valid.
 const TOOLS = [
   { id: 'nfc', name: 'NFC 卡片解码', tag: '8A · v2 / v3', description: '从卡片链接还原字符头像、颜色和完整留言。也可以下载一份离线解码器。', mount: mountNfc },
-  { id: 'text', name: '文本编码转换', tag: 'UTF-8 · 浏览器本地', description: '在文字、Base64、URL 编码和十六进制之间转换，支持中文。', mount: mountText }
+  { id: 'text', name: '文本编码转换', tag: 'UTF-8 · 浏览器本地', description: '在文字、Base64、URL 编码和十六进制之间转换，支持中文。', mount: mountText },
+  { id: 'water-wave', name: '水波场恢复', tag: 'FCD · Python 科学计算', description: '从参考棋盘格与动态影像恢复水面高度，框选范围并导出波场、剖面与时间序列。', mount: () => { location.href = 'water-wave/'; } }
 ];
 const app = document.getElementById('app');
 function el(tag, options = {}, children = []) {
