@@ -46,6 +46,12 @@
 <div class="roi-row"><label>X 起点<input id="roi-x" type="number" value="0" min="0" step="1"></label><label>Y 起点<input id="roi-y" type="number" value="0" min="0" step="1"></label><label>宽度<input id="roi-w" type="number" value="256" min="64" step="1"></label><label>高度<input id="roi-h" type="number" value="256" min="64" step="1"></label><button id="full-roi">整幅图像</button></div>
 <p class="help" id="geometry-info">范围使用原图零起点像素坐标。虚线框内为裁边后有效区域；线点须在其中。</p>
 <div id="geometry-list" class="chips"></div>
+<details class="geometry-editor" open><summary>输入坐标添加线 / 点</summary>
+<p class="help">与鼠标绘制使用同一套原图坐标，支持小数像素。已有线点可在上方修改后点击“应用”。</p>
+<div class="sample-fields"><label>采样类型<select id="sample-type"><option value="point">采样点</option><option value="line">自由线</option><option value="hline">水平线</option><option value="vline">竖直线</option></select></label>
+<label id="sample-x-label">X / 起点 X<input id="sample-x" type="number" step="any" placeholder="原图 X"></label><label id="sample-y-label">Y / 起点 Y<input id="sample-y" type="number" step="any" placeholder="原图 Y"></label>
+<label id="sample-x2-label" hidden>终点 X<input id="sample-x2" type="number" step="any" placeholder="原图 X"></label><label id="sample-y2-label" hidden>终点 Y<input id="sample-y2" type="number" step="any" placeholder="原图 Y"></label>
+<button id="add-sample">添加采样</button></div></details>
 </section>
 <section class="panel"><h2><span class="step">04</span> 选择导出内容</h2>
 <div class="export-grid">
@@ -68,6 +74,6 @@
 <section id="result-panel" class="panel" hidden><div class="section-head"><h2>恢复预览 <small id="result-frame"></small></h2><span class="badge">与参考图相同的图像坐标</span></div><div class="result-layout"><img id="result" alt="恢复高度场预览"><div class="color-legend"><span id="max-label">+1 mm</span><div></div><span id="min-label">−1 mm</span></div></div></section>
 </div></div>
 <section class="method"><h2>从格纹位移到水面高度</h2><p>参考照片 → 双载波傅里叶解调 → 光学表观位移 → 折射模型 → 二维梯度积分。默认使用原 MATLAB 算法的有限差分积分，增加输入校验、可追溯标定和可复用选区。</p><p>适用于清晰、无遮挡的周期格纹与小坡度水面。大幅折射、反光、失焦和透视会影响结果；载波强度不代表误差界限。合成数据验证不能代替真实实验标定。</p><a href="https://doi.org/10.1007/s00348-018-2553-9" target="_blank" rel="noopener noreferrer">FCD 方法 · Wildeman (2018) ↗</a> · <a href="guide.html" target="_blank">使用说明与输出格式 ↗</a></section>
-</main><footer>同一份 Python 算法，本地与浏览器共用。网页版首次从 jsDelivr 下载 Pyodide / NumPy / SciPy / Pillow；输入影像只在当前设备处理。关闭页面前请下载结果。</footer>
-<script src="app.js"></script>
+</main><footer>同一份 Python 算法，本地与浏览器共用。网页版首次从 jsDelivr 下载 Pyodide / NumPy / SciPy / Pillow，导入 AVI 时另加载 FFmpeg 解码器；输入影像只在当前设备处理。关闭页面前请下载结果。</footer>
+<script src="ui-utils.js"></script><script src="app.js"></script>
 </body></html>

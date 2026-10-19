@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 import tempfile
 import threading
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
+import re
 import uuid
 import webbrowser
 import numpy as np
@@ -79,7 +80,11 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json_response({"error": "结果未就绪"}, 404)
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
-            self.send_header("Content-Disposition", 'attachment; filename="water-wave-results.zip"')
+            name = parse_qs(parsed.query).get("filename", ["water-wave-results.zip"])[0]
+            name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)[:180]
+            if not name.lower().endswith('.zip'):
+                name += '.zip'
+            self.send_header("Content-Disposition", "attachment; filename=\"water-wave-results.zip\"; filename*=UTF-8''" + quote(name, safe=''))
             self.send_header("Content-Length", str(s.path.stat().st_size))
             self.end_headers()
             with s.path.open("rb") as f:

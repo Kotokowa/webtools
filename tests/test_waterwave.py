@@ -180,6 +180,9 @@ class ExportTests(unittest.TestCase):
                 result=call({'op':'video_frame','video':key,'session':session,'index':i,'name':'fixture.avi'})
                 self.assertEqual(result['summary']['frame_id'],i+1)
             call({'op':'finish','session':session})
+            name='实验01_results.zip'
+            with opener.open(base+'/api/download?session='+session+'&filename='+urllib.parse.quote(name)) as download:
+                self.assertIn("filename*=UTF-8''"+urllib.parse.quote(name,safe=''),download.headers['Content-Disposition'])
             with zipfile.ZipFile(io.BytesIO(opener.open(base+'/api/download?session='+session).read())) as z:
                 self.assertIsNone(z.testzip());self.assertGreater(len(z.read('height.mp4')),1000)
                 manifest=json.loads(z.read('manifest.json'))

@@ -64,9 +64,19 @@ displacements. A synthetic validation error is not an experimental guarantee.
 `waterwave/core.py` contains the numerical library; `session.py` handles
 decoding and streaming ZIP exports; `server.py` serves the local GUI and
 OpenCV video decoding. `src/water-wave/worker.js` loads the same Python
-modules in the browser. Web video is sampled with the supplied constant FPS;
-use local mode for AVI or precise video frame extraction. MP4 result export
-is local-only. Large image stacks and ZIPs are best processed locally.
+modules in the browser. AVI uses a separate single-thread FFmpeg WASM worker,
+reads the file's FPS/frame count and extracts selected frames as lossless BMPs.
+The original File is mounted with WORKERFS rather than copied into the WASM
+heap. Other browser video formats use the supplied constant FPS and browser
+seeking. Variable-rate video and large stacks are best processed locally;
+MP4 result export is local-only. AVI first use downloads about 32 MB from
+jsDelivr (@ffmpeg/core 0.12.10); no cross-origin isolation headers are needed.
+
+Points and profile lines support both drawing and fractional pixel coordinate
+entry/editing. The tab shows reconstruction progress and restores its title
+after completion, cancellation or error. Downloads use `<source>_results.zip`:
+image sequences strip the final frame number (any padding); videos keep their
+complete stem. For example, `wave_00001.tiff` becomes `wave_results.zip`.
 
 No experiment images, measurement results, private paths or credentials are
 included in the published source or website.
@@ -106,3 +116,10 @@ project code is MIT-licensed; see LICENSE.
 FCD carrier demodulation, phase unwrapping and inverse-gradient algorithms
 are adapted from Sander Wildeman's MIT-licensed MATLAB FCD (2017–2018).
 See `waterwave/LICENSE-FCD.txt` and the algorithm comments in `core.py`.
+
+AVI imports dynamically load [ffmpeg.wasm core 0.12.10](https://www.npmjs.com/package/@ffmpeg/core/v/0.12.10)
+from jsDelivr. The wrapper is MIT; the linked core contains FFmpeg and GPL
+codec components and is not covered by this project's MIT license.
+See [upstream source and build recipes](https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10),
+[licensing](https://github.com/ffmpegwasm/ffmpeg.wasm/blob/v0.12.10/LICENSE),
+and [FFmpeg legal information](https://ffmpeg.org/legal.html).
