@@ -1,7 +1,7 @@
 // Add tools here, each with an independent mount function. Keep the bare
 // fragment route reserved for 8A cards so existing physical tags stay valid.
 const TOOLS = [
-  { id: 'nfc', name: 'NFC 卡片解码', tag: '8A · v2 / v3', description: '从卡片链接还原字符头像、颜色和完整留言。也可以下载一份离线解码器。', mount: mountNfc },
+  { id: 'nfc', name: 'NFC 卡片解码', tag: '8A · v2 / v3 / v5', description: '从卡片链接还原不同尺寸、多种颜色的字符图和完整留言，兼容旧卡。', mount: mountNfc },
   { id: 'text', name: '文本编码转换', tag: 'UTF-8 · 浏览器本地', description: '在文字、Base64、URL 编码和十六进制之间转换，支持中文。', mount: mountText },
   { id: 'water-wave', name: '水波场恢复', tag: 'FCD · Python 科学计算', description: '从参考棋盘格与动态影像恢复水面高度，框选范围并导出波场、剖面与时间序列。', mount: () => { location.href = 'water-wave/'; } },
   { id: 'perspective', name: '图片透视裁剪', tag: '四角校正 · 浏览器本地', description: '选出照片中的四个角，拖动微调，将倾斜画面校正为矩形并下载。', mount: mountPerspective }
@@ -38,23 +38,20 @@ function mountNfc(initial = '') {
   const input = el('textarea', { id: 'nfc-input', spellcheck: 'false', placeholder: '粘贴完整链接或 # 后的编码', 'aria-label': '卡片链接' });
   const button = el('button', { class: 'primary', text: '展开内容', type: 'button', id: 'nfc-decode' });
   const details = el('details', {}, [el('summary', { text: '手动解码与离线备份' }),
+    el('p', { text: '自动识别旧版 v2/v3 和可扩展 v5 卡片。新格式自带尺寸、调色板和字段长度；内容增加后仍需检查卡片容量。' }),
     el('p', { text: '离线解码器自带全部代码。保存后，无网络也能打开它，粘贴完整卡片链接来还原内容。' }), input,
-    el('div', { class: 'toolbar' }, [button, el('a', { class: 'button', download: 'nfc-offline.html', href: 'nfc-offline.html', text: '下载离线解码器' })])]);
+    el('div', { class: 'toolbar' }, [button, el('a', { class: 'button', download: 'nfc-offline.html', href: 'nfc-offline.html', text: '下载离线解码器' }),
+      el('a', { class: 'button', download: 'nfc-v5-example.json', href: 'nfc-v5-example.json', text: '下载新卡内容模板' })]),
+    el('p', {}, [document.createTextNode('新卡制作：修改模板后，用仓库中的编码脚本生成写卡文件。'), el('a', { href: 'https://github.com/Kotokowa/webtools/blob/main/docs/nfc-format.md', text: '格式与制作说明', target: '_blank', rel: 'noopener noreferrer' })])]);
   app.append(status, card, details);
-  const fit = () => { pre.style.fontSize = Math.min(13.5, Math.max(4, (card.clientWidth - (innerWidth <= 480 ? 24 : 48)) / (64 * 0.601))) + 'px'; };
+  const fit = () => { pre.style.fontSize = Math.min(13.5, Math.max(1, (card.clientWidth - (innerWidth <= 480 ? 24 : 48)) / (Number(pre.dataset.columns || 64) * 0.601))) + 'px'; };
   window.onresize = fit;
   function render(value) {
     try {
       const data = decodeCard(value);
-      pre.replaceChildren(); pre.style.color = data.color;
-      for (let y = 0; y < data.rows.length; y++) {
-        for (let x = 0; x < data.rows[y].length; x++) {
-          if (data.accent[y][x]) { const span = el('span', { text: data.rows[y][x] }); span.style.color = data.accentColor; pre.append(span); }
-          else pre.append(document.createTextNode(data.rows[y][x]));
-        }
-        if (y < data.rows.length - 1) pre.append(document.createTextNode('\n'));
-      }
-      message.textContent = data.message; website.href = data.website;
+      renderCardAvatar(pre, data);
+      message.textContent = data.message; website.hidden = !data.website;
+      if (data.website) website.href = data.website; else website.removeAttribute('href');
       card.hidden = false; status.textContent = ''; fit();
     } catch (e) { card.hidden = true; status.textContent = '未能展开：' + String(e.message || e); details.open = true; }
   }

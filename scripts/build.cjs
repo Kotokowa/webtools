@@ -14,6 +14,7 @@ const html = read('src/index.html').replace('/*__CROPPER_CSS__*/', () => read('s
 fs.writeFileSync(path.join(root, 'dist/index.html'), html);
 fs.copyFileSync(path.join(root, 'src/vendor/LICENSE-brotli.txt'), path.join(root, 'dist/LICENSE-brotli.txt'));
 fs.writeFileSync(path.join(root, 'dist/.nojekyll'), '');
+fs.copyFileSync(path.join(root, 'examples/nfc-v5.json'), path.join(root, 'dist/nfc-v5-example.json'));
 // Additive tool: no changes to NFC routing, decoder or offline artifact.
 const waveDest = path.join(root, 'dist/water-wave');
 fs.cpSync(path.join(root, 'src/water-wave'), waveDest, { recursive: true });

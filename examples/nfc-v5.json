@@ -1,0 +1,14 @@
+{
+  "version": 5,
+  "glyph": "8",
+  "palette": ["#66ccff", "#72c330", "#b2e175"],
+  "pixels": [
+    [0, 1, 1, 0, 2, 2, 0],
+    [1, 0, 0, 1, 0, 0, 2],
+    [1, 0, 3, 0, 3, 0, 2],
+    [0, 1, 0, 3, 0, 2, 0],
+    [0, 0, 1, 1, 2, 0, 0]
+  ],
+  "message": "你好！\n这是一张可以扩展的示例卡。",
+  "url": "https://example.com/a-longer-link?source=nfc#hello"
+}

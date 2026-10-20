@@ -12,7 +12,7 @@
 /*__CODEC__*/
 function fitAvatar() {
   const available = document.getElementById('card').clientWidth - (innerWidth <= 420 ? 24 : 40);
-  document.getElementById('avatar').style.fontSize = Math.min(13.5, Math.max(4, available / (64 * 0.601))) + 'px';
+  document.getElementById('avatar').style.fontSize = Math.min(13.5, Math.max(1, available / (Number(document.getElementById('avatar').dataset.columns || 64) * 0.601))) + 'px';
 }
 function show(input) {
   const status = document.getElementById('status');
@@ -20,17 +20,10 @@ function show(input) {
   try {
     const data = decodeCard(input);
     const pre = document.getElementById('avatar');
-    pre.replaceChildren(); pre.style.color = data.color;
-    for (let y = 0; y < data.rows.length; y++) {
-      for (let x = 0; x < data.rows[y].length; x++) {
-        if (data.accent[y][x]) {
-          const span = document.createElement('span'); span.style.color = data.accentColor; span.textContent = data.rows[y][x]; pre.append(span);
-        } else pre.append(document.createTextNode(data.rows[y][x]));
-      }
-      if (y < data.rows.length - 1) pre.append(document.createTextNode('\n'));
-    }
+    renderCardAvatar(pre, data);
     document.getElementById('message').textContent = data.message;
-    document.getElementById('website').href = data.website;
+    const website = document.getElementById('website'); website.hidden = !data.website;
+    if (data.website) website.href = data.website; else website.removeAttribute('href');
     card.hidden = false; status.textContent = ''; fitAvatar();
   } catch (error) {
     card.hidden = true; status.textContent = '未能展开：' + String(error.message || error);

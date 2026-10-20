@@ -2,8 +2,10 @@
 
 A small static toolbox, published at https://kotokowa.github.io/webtools/.
 
-- **NFC decoder:** restores a 64×40 character avatar, two colors, message and
-  website from an 8A v2/v3 URL fragment. Payloads stay in the fragment and are
+- **NFC decoder:** restores a character image, colors, message and
+  website from an 8A v2/v3/v5 URL fragment. Existing fixed-layout v2/v3 cards
+  stay readable; self-describing v5 supports variable dimensions/palette and
+  field lengths. Payloads stay in the fragment and are
   decoded in the browser. No analytics, remote libraries or personal fixtures.
 - **Text encoders:** UTF-8 Base64, URL component encoding and hexadecimal.
 - **Perspective cropper:** select four corners in any order, drag to refine,
@@ -91,6 +93,28 @@ No experiment images, measurement results, private paths or credentials are
 included in the published source or website.
 
 ## Encode an NFC card (local CLI)
+
+For new flexible cards, start with [`examples/nfc-v5.json`](examples/nfc-v5.json).
+`pixels` is a rectangular grid: 0 means blank, 1 means the first palette color,
+2 means the second, etc. Width/height, color count and all field lengths are
+derived automatically; add a row/column, a palette color, text or a longer
+URL without changing decoder code. Dimensions are 1–128 per side, palette
+1–255 RGB colors, glyph a single visible ASCII character (default `8`).
+Text is UTF-8; URL can contain a path, query and fragment. Omit text/URL if
+unneeded. The raw package is limited to 4096 bytes; compressed NDEF still must
+fit the physical card. New v5 metadata can cost more space than compact v3.
+
+```sh
+python scripts/make-payload.py examples/nfc-v5.json PRIVATE-payload.raw
+node scripts/pack.cjs PRIVATE-payload.raw https://kotokowa.github.io/webtools/ PRIVATE-card
+python -m unittest discover -s tests -p test_nfc_encoder.py -v
+```
+
+The encoder selects v5 for `pixels` input, or v3 for existing `rows` input;
+an explicit `version` is also accepted. Existing on-card fragments need no
+rewrite and no personal content is moved into the viewer. Save the latest
+offline HTML to decode both old and new cards. The viewer detects formats
+from the decompressed version byte; it does not guess missing metadata.
 
 See [format specification](docs/nfc-format.md). This is a custom payload
 format, carried by a standard NDEF HTTPS URI record; it is not a general
