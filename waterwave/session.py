@@ -16,9 +16,13 @@ from PIL import Image, ImageDraw, ImageOps
 from scipy import signal
 from .core import Config, Reconstructor, sample_geometry, synthetic_frame
 from . import __version__
+from .measurement import RMSAccumulator
+from .analysis import clean
+from .fields import save_field, describe, write_field_exports, dispatch_field, artifact
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 EXPORTS = {"height_npz", "raw_npz", "height_csv", "height_png", "displacement", "quality", "lines", "points", "temporal", "spectrum", "wavelength", "video"}
+EXPORTS |= {"rms_npz", "rms_mat", "rms_png", "rms_csv", "focal"}
 
 
 def natural_key(name):
@@ -48,11 +52,12 @@ def image_preview(a):
     return base64.b64encode(png_bytes(im)).decode()
 
 
-def field_image(field, limit, *, title="Elevation (mm)", scale=None, positive=False, annotate=False):
+def field_image(field, limit, *, title="Elevation (mm)", scale=None, positive=False, annotate=False, axes=None):
     a = np.asarray(field)
-    t = np.clip(a/limit if positive else (a/limit+1)/2, 0, 1)
+    t = np.nan_to_num(np.clip(a/limit if positive else (a/limit+1)/2, 0, 1), nan=0)
     stops = np.array([[27, 66, 122], [56, 140, 178], [241, 246, 247], [234, 147, 91], [165, 44, 47]])
     rgb = np.stack([np.interp(t, np.linspace(0, 1, len(stops)), stops[:, c]) for c in range(3)], axis=-1).astype(np.uint8)
+    rgb[~np.isfinite(a)] = [150, 150, 150]
     im = Image.fromarray(rgb)
     if not annotate:
         return im
@@ -67,7 +72,10 @@ def field_image(field, limit, *, title="Elevation (mm)", scale=None, positive=Fa
     for frac in (0, .5, 1):
         val = limit*(1-frac) if positive else limit*(1-2*frac)
         draw.text((im.width+80, 32+int(frac*(im.height-10))), f"{val:.3g}", fill="#243746")
-    draw.text((48, im.height+43), "x right / y down; origin at retained ROI top-left", fill="#536877")
+    draw.text((48, im.height+43), "x right / y down", fill="#536877")
+    if axes is not None:
+        x, y = axes
+        draw.text((48, im.height+58), f"x {x[0]:.4g}..{x[-1]:.4g} mm | y {y[0]:.4g}..{y[-1]:.4g} mm", fill="#536877")
     if scale:
         draw.text((48, im.height+58), f"Width {(original_shape[1]-1)*scale:.3f} mm | Height {(original_shape[0]-1)*scale:.3f} mm", fill="#536877")
     return out
@@ -113,6 +121,9 @@ class Session:
         self.closed = False
         self.finished = False
         self.reference_name = settings.get("reference_name", "reference")
+        cfg = self.recon.config
+        self.rms = RMSAccumulator(self.recon.metadata['output_shape'], cfg.rms_min_fraction, cfg.frequency_hz if cfg.lockin else 0)
+        self.field_key = None
 
     def table(self, name, header, rows):
         if name not in self.tables:
@@ -141,10 +152,17 @@ class Session:
             raise ValueError("时域分析预计超出内存限额；减小选区/帧数或取消振幅相位导出。已完成帧可保留下载")
         result = self.recon.restore(image)
         h = result["height_mm"]
+        self.rms.add(h, time_s)
         seq = len(self.frames)+1
         tag = f"{seq:06d}_frame_{frame_id}"
         origin, scale = self.recon.metadata["output_origin_px"], self.recon.scale
         samples = sample_geometry(h, self.geometry, origin, scale)
+        x_axis, y_axis = self.recon.coordinates()
+        for sample in samples:
+            local = sample['xy_px']-np.asarray(origin)
+            sample['xy_mm'] = np.column_stack([np.interp(local[:, 0], np.arange(len(x_axis)), x_axis),
+                                               np.interp(local[:, 1], np.arange(len(y_axis)), y_axis)])
+            sample['distance_mm'] = np.linalg.norm(sample['xy_mm']-sample['xy_mm'][0], axis=1)
         if "wavelength" in self.exports:
             for sample in samples:
                 if sample["kind"] != "line":
@@ -168,12 +186,12 @@ class Session:
                 self.table("wavelength.csv", ["frame_id", "time_s", "line_id", "spatial_frequency_per_mm", "wavelength_mm", "note"],
                            [[frame_id, time_s, sample["id"], frequency, wavelength, note]])
         meta = {"source_name": str(name), "frame_id": int(frame_id), "time_s": time_s,
-                "min_mm": float(h.min()), "max_mm": float(h.max()), "rms_mm": float(np.sqrt(np.mean(h*h))),
-                "mean_mm": float(h.mean()), "low_carrier_fraction": result["low_carrier_fraction"],
+                "min_mm": float(np.nanmin(h)), "max_mm": float(np.nanmax(h)), "rms_mm": float(np.sqrt(np.nanmean(h*h))),
+                "mean_mm": float(np.nanmean(h)), "low_carrier_fraction": result["low_carrier_fraction"],
                 "mean_displacement_px": result["mean_displacement_px"], "warnings": result["warnings"]}
         if "height_npz" in self.exports:
-            self.array_file(f"height/{tag}.npz", height_mm=h, x_mm=np.arange(h.shape[1])*scale,
-                            y_mm=np.arange(h.shape[0])*scale, origin_px=origin,
+            self.array_file(f"height/{tag}.npz", height_mm=h, x_mm=x_axis,
+                            y_mm=y_axis, origin_px=origin,
                             frame_id=frame_id, time_s=np.nan if time_s is None else time_s)
         if "raw_npz" in self.exports:
             self.array_file(f"before_detrend/{tag}.npz", height_mm=result["raw_height_mm"])
@@ -182,7 +200,7 @@ class Session:
                 with io.TextIOWrapper(binary, encoding="utf-8", newline="") as f:
                     np.savetxt(f, h, delimiter=",", fmt="%.7g", header="height_mm; rows=y, columns=x; scale/origin in manifest.json")
         if self.exports & {"height_png", "video"}:
-            pic = field_image(h, self.recon.config.color_limit_mm, scale=scale, annotate=True,
+            pic = field_image(h, self.recon.config.color_limit_mm, axes=(x_axis, y_axis), annotate=True,
                               title=f"Elevation (mm) | Frame {frame_id} | t={time_s if time_s is not None else 'unknown'} s")
             data = png_bytes(pic)
             if "height_png" in self.exports:
@@ -232,8 +250,11 @@ class Session:
         if "temporal" in self.exports and uniform:
             stack = np.stack(self.heights, axis=0)
             self.heights.clear()
+            all_valid = np.isfinite(stack).all(axis=0)
+            stack[:, ~all_valid] = 0
             stack -= stack.mean(axis=0, keepdims=True)
             analytic = np.conj(signal.hilbert(stack, axis=0))
+            analytic[:, ~all_valid] = np.nan
             self.array_file("temporal/amplitude_phase.npz", amplitude_mm=np.abs(analytic).astype(np.float32),
                             phase_rad=np.mod(np.angle(analytic), 2*np.pi).astype(np.float32), time_s=times,
                             frame_id=[f["frame_id"] for f in self.frames], convention="exp(-i omega t); axis order time,y,x")
@@ -277,7 +298,13 @@ class Session:
         for name, (f, _) in self.tables.items():
             f.close()
             self.zip.write(self.directory/name, name)
-        manifest = {"schema": "waterwave-results-v1", "version": __version__, **self.recon.metadata,
+        rms = self.rms.finish()
+        x, y = self.recon.coordinates()
+        rms.update(X_cm=x/10, Y_cm=y/10, source=self.frames[0]['source_name'],
+                   config_json=json.dumps(self.recon.metadata['config']))
+        self.field_key = save_field(rms)
+        write_field_exports(self.zip, rms, self.exports)
+        manifest = {"schema": "waterwave-results-v2", "version": __version__, **self.recon.metadata,
                     "reference_name": self.reference_name, "geometry": self.geometry, "exports": sorted(self.exports),
                     "frames": self.frames, "partial": partial, "temporal_note": temporal_note,
                     "interpretation": "Relative elevation after chosen detrending. Optical u/v are not fluid particle displacements. Hilbert edge frames are unreliable. No experimental error bound is claimed."}
@@ -301,6 +328,8 @@ sessions = {}
 
 def dispatch(message):
     op = message.get("op")
+    if op.startswith('field_') or op.startswith('artifact_'):
+        return dispatch_field(message)
     if op == "inspect":
         a = decode_image(base64.b64decode(message["data"], validate=True))
         return {"width": a.shape[1], "height": a.shape[0], "preview": image_preview(a)}
@@ -326,8 +355,7 @@ def dispatch(message):
         path = s.finish(bool(message.get("partial", False)))
         with zipfile.ZipFile(path) as z:
             note = json.loads(z.read("manifest.json"))["temporal_note"]
-        return {"filename": path.name, "size": path.stat().st_size,
-                "note": note}
+        return {"filename": path.name, **artifact(path), "field": describe(s.field_key), "note": note}
     if op == "dispose":
         s.dispose()
         del sessions[key]

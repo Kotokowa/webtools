@@ -9,11 +9,12 @@ from dataclasses import asdict, dataclass
 import math
 import numpy as np
 from scipy import fft, ndimage, signal
+from .measurement import valid_mask, fill_pattern, Bridge
 
 
 @dataclass
 class Config:
-    water_depth_mm: float = 20.0
+    water_depth_mm: float = 30.0
     acrylic_mm: float = 10.0
     n_water: float = 1.33
     n_acrylic: float = 1.49
@@ -23,17 +24,53 @@ class Config:
     edge_crop: int = 10
     unwrap: bool = True
     remove_mean_displacement: bool = True
-    detrend: str = "plane"  # none, plane, quadratic (MATLAB new-list option)
+    detrend: str = "quadratic"
     filter_ratio: float = 1.0
     integration: str = "difference"
     color_limit_mm: float = 1.0
-    fps: float = 0.0  # zero means timestamps unknown
+    fps: float = 100.0
     temporal_limit_mb: float = 256.0
+    pipeline: str = "final3"
+    height_scale: float = 1.0
+    masking: bool = True
+    mask_dark: float = .25
+    mask_mod: float = .30
+    mask_saturation: float = 1.01
+    mask_window: int = 21
+    mask_min_blob: int = 100
+    mask_grow: int = 2
+    mask_guard: int = 10
+    fill_ring: int = 20
+    coordinate_calibration: bool = True
+    displacement_calibration: bool = True
+    cal_x_slope: float = 1.022
+    cal_y_slope: float = 1.020
+    cal_x_offset_cm: float = .04
+    cal_y_offset_cm: float = .05
+    cal_slope_error: float = .001
+    cal_offset_error_cm: float = .02
+    rms_min_fraction: float = .8
+    lockin: bool = False
+    frequency_hz: float = 6.0
 
     def validate(self):
         for key, value in asdict(self).items():
             if isinstance(value, (int, float)) and not math.isfinite(value):
                 raise ValueError(f"{key} 必须为有限数值")
+        if self.pipeline not in ("final3", "legacy"):
+            raise ValueError("未知算法版本")
+        if min(self.height_scale, self.cal_x_slope, self.cal_y_slope) <= 0:
+            raise ValueError("标定系数须大于 0")
+        for key in ("mask_window", "mask_min_blob", "mask_grow", "mask_guard", "fill_ring"):
+            value = getattr(self, key)
+            if value < 0 or value != int(value):
+                raise ValueError("掩膜尺寸须为非负整数")
+        if self.mask_window < 1 or not 0 < self.rms_min_fraction <= 1 or self.frequency_hz < 0:
+            raise ValueError("RMS 或掩膜参数无效")
+        if self.lockin and self.frequency_hz <= 0:
+            raise ValueError("锁相频率须大于 0")
+        if min(self.mask_dark, self.mask_mod, self.mask_saturation, self.cal_slope_error, self.cal_offset_error_cm) < 0:
+            raise ValueError("阈值及不确定度不能为负")
         if self.water_depth_mm <= 0 or self.acrylic_mm < 0:
             raise ValueError("水深须大于 0，底板厚度不能为负")
         if not (self.n_water > self.n_air > 0 and self.n_acrylic > 0):
@@ -145,7 +182,7 @@ def unwrap_phase(ph):
     return ph + (jumps-values[counts.argmax()])*2*np.pi
 
 
-def detrend_field(h, mode):
+def detrend_field(h, mode, valid=None):
     if mode == "none":
         return h.copy()
     # Normalized coordinates avoid the ill-conditioning of raw pixel powers.
@@ -156,7 +193,12 @@ def detrend_field(h, mode):
     elif mode != "plane":
         raise ValueError("未知去趋势方式")
     design = np.stack([b.ravel() for b in basis], axis=1)
-    coeff = np.linalg.lstsq(design, h.ravel(), rcond=None)[0]
+    valid = np.isfinite(h) if valid is None else valid & np.isfinite(h)
+    ids = np.flatnonzero(valid)
+    if len(ids) < len(basis):
+        raise ValueError("有效像素不足以去趋势")
+    ids = ids[::max(1, int(np.ceil(len(ids)/300000)))]
+    coeff = np.linalg.lstsq(design[ids], h.ravel()[ids], rcond=None)[0]
     return h - (design @ coeff).reshape(h.shape)
 
 
@@ -177,7 +219,20 @@ class Reconstructor:
             raise ValueError("选区过小；至少 64×64，且须留出边缘裁剪区域")
         self.roi = list(roi)
         self.reference = a[y0:y1, x0:x1]
-        self.kr, self.ku = find_carriers(self.reference)
+        self.valid_ref = np.ones(self.reference.shape, bool)
+        self.holes_ref = np.zeros(self.reference.shape, bool)
+        self.bridge = Bridge()
+        self.fill_fallbacks = 0
+        detection = self.reference.copy()
+        if self.config.masking and self.config.pipeline != "legacy":
+            self.valid_ref, self.holes_ref, self.thresholds = valid_mask(self.reference, self.config)
+            if self.valid_ref.sum() < 64:
+                raise ValueError("参考图有效格纹不足")
+            detection[~self.valid_ref] = np.median(detection[self.valid_ref])
+        self.kr, self.ku = find_carriers(detection)
+        self.reference, fallback = fill_pattern(self.reference, self.reference, self.holes_ref,
+                                               [self.kr, self.ku], int(self.config.fill_ring))
+        self.fill_fallbacks += int(fallback)
         self.radius = np.linalg.norm(self.kr-self.ku)/2*self.config.filter_ratio
         ky, kx = self.reference.shape
         gx, gy = np.meshgrid(kvec(kx), kvec(ky))
@@ -189,7 +244,7 @@ class Reconstructor:
             self.carriers.append((mask, np.conj(ref), np.abs(ref)))
         self.scale = self.config.mm_per_pixel or float(np.linalg.norm(self.kr+self.ku)*self.config.square_mm/(2*np.pi))
         self.leff = (self.config.water_depth_mm + self.config.acrylic_mm*self.config.n_water/self.config.n_acrylic)*(1-self.config.n_air/self.config.n_water)
-        self.H = self.leff/self.scale
+        self.H = self.config.height_scale*self.leff/self.scale
         self.warnings = []
         cosine = float(np.dot(self.kr, self.ku)/(np.linalg.norm(self.kr)*np.linalg.norm(self.ku)))
         ratio = float(np.linalg.norm(self.kr)/np.linalg.norm(self.ku))
@@ -205,17 +260,38 @@ class Reconstructor:
                 "output_shape": [int(n-2*e) for n in self.reference.shape],
                 "output_origin_px": [self.roi[0]+e, self.roi[1]+e],
                 "mm_per_pixel": self.scale, "effective_optical_length_mm": self.leff,
+                "x_mm": self.coordinates()[0].tolist(), "y_mm": self.coordinates()[1].tolist(),
+                "algorithm": self.config.pipeline, "fill_fallback_count": self.fill_fallbacks,
                 "H_pixels": self.H, "carrier_r_rad_per_pixel": self.kr.tolist(),
                 "carrier_u_rad_per_pixel": self.ku.tolist(), "filter_radius": float(self.radius),
                 "coordinate_convention": "original image pixel centers; x right, y down; ROI half-open",
                 "warnings": self.warnings}
+
+    def coordinates(self):
+        e = self.config.edge_crop
+        offset = 0 if self.config.pipeline == 'legacy' else 1
+        x = (np.arange(self.reference.shape[1]-2*e)+offset)*self.scale
+        y = (np.arange(self.reference.shape[0]-2*e)+offset)*self.scale
+        if self.config.coordinate_calibration and self.config.pipeline != "legacy":
+            x = (x-10*self.config.cal_x_offset_cm)/self.config.cal_x_slope
+            y = (y-10*self.config.cal_y_offset_cm)/self.config.cal_y_slope
+        return x, y
 
     def restore(self, image):
         a = gray(image)
         if a.shape != self.image_shape:
             raise ValueError(f"动态图尺寸 {a.shape} 与参考图 {self.image_shape} 不一致；不能自动缩放定量输入")
         x0, y0, x1, y1 = self.roi
-        fd = fft.fft2(a[y0:y1, x0:x1])
+        frame = a[y0:y1, x0:x1]
+        valid, holes = self.valid_ref.copy(), self.holes_ref.copy()
+        if self.config.masking and self.config.pipeline != "legacy":
+            vf, hf, _ = valid_mask(frame, self.config, self.thresholds)
+            valid &= vf; holes |= hf
+            frame, fallback = fill_pattern(frame, self.reference, holes, [self.kr, self.ku], int(self.config.fill_ring))
+            self.fill_fallbacks += int(fallback)
+        if valid.sum() < 64:
+            raise ValueError("动态图有效像素不足")
+        fd = fft.fft2(frame)
         phases, qualities = [], []
         for mask, refconj, refamp in self.carriers:
             field = fft.ifft2(fd*mask)
@@ -230,12 +306,21 @@ class Reconstructor:
         v = (kr[0]*phases[1]-ku[0]*phases[0])/det
         e = self.config.edge_crop
         cut = (slice(e, -e), slice(e, -e)) if e else (slice(None), slice(None))
-        u, v = u[cut], v[cut]
-        mean = [float(u.mean()), float(v.mean())]
+        if self.config.pipeline == "legacy":
+            u, v, valid = u[cut], v[cut], valid[cut]
+        else:
+            u, v = self.bridge.apply(u, holes), self.bridge.apply(v, holes)
+            if self.config.displacement_calibration:
+                u = (u-10*self.config.cal_x_offset_cm/self.scale)/self.config.cal_x_slope
+                v = (v-10*self.config.cal_y_offset_cm/self.scale)/self.config.cal_y_slope
+        mean = [float(u[valid].mean()), float(v[valid].mean())]
         if self.config.remove_mean_displacement:
             u, v = u-mean[0], v-mean[1]
         raw = inverse_gradient(-u, -v, difference=self.config.integration == "difference")/self.H*self.scale
-        height = detrend_field(raw, self.config.detrend)
+        if self.config.pipeline != "legacy":
+            raw, u, v, valid = raw[cut], u[cut], v[cut], valid[cut]
+        height = detrend_field(raw, self.config.detrend, valid)
+        raw[~valid] = np.nan; height[~valid] = np.nan
         q = np.minimum(*qualities)[cut]
         low = float(np.mean(q < .15))
         warnings = self.warnings.copy()
@@ -245,7 +330,7 @@ class Reconstructor:
                 "u_px": u.astype(np.float32), "v_px": v.astype(np.float32),
                 "slope_x": (-u/self.H).astype(np.float32), "slope_y": (-v/self.H).astype(np.float32),
                 "carrier_quality": q.astype(np.float32), "mean_displacement_px": mean,
-                "low_carrier_fraction": low, "warnings": warnings}
+                "low_carrier_fraction": low, "warnings": warnings, "valid": valid}
 
 
 def sample_geometry(field, geometry, origin, scale):

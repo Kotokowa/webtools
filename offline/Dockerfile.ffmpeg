@@ -1,0 +1,28 @@
+FROM emscripten/emsdk:3.1.40 AS build
+ENV FFMPEG_ST=yes
+ENV INSTALL_DIR=/opt
+ENV CFLAGS="-O3"
+ENV LDFLAGS="-O3"
+WORKDIR /work
+RUN git init shim && cd shim && git remote add origin https://github.com/ffmpegwasm/ffmpeg.wasm.git && \
+    git fetch --depth 1 origin f876f907c7e9b9bf51d4ed0b913a855a63ae63fc && git checkout FETCH_HEAD && cd .. && \
+    git clone --depth 1 --branch n5.1.4 https://github.com/FFmpeg/FFmpeg.git ffmpeg
+WORKDIR /work/ffmpeg
+RUN bash /work/shim/build/ffmpeg.sh --disable-gpl --disable-nonfree --disable-network --disable-everything \
+    --enable-protocol=file --enable-avfilter --enable-swscale \
+    --enable-demuxer=avi,mov,matroska,image2,bmp_pipe \
+    --enable-muxer=image2 --enable-encoder=bmp \
+    --enable-decoder=rawvideo,mjpeg,mjpegb,mpeg4,h264,hevc,ffv1,huffyuv,ffvhuff,utvideo,vp8,vp9,av1,png,bmp,msmpeg4v2,msmpeg4v3,wmv1,wmv2,wmv3,dvvideo,mpeg1video,mpeg2video,v210 \
+    --enable-parser=h264,hevc,mpeg4video,mjpeg,vp8,vp9,av1,mpegvideo \
+    --enable-filter=scale,format,null,buffer,buffersink,trim,setpts
+RUN cp -r /work/shim/src/bind src/ && cp -r /work/shim/src/fftools src/ && \
+    sed '/-lpostproc/d' /work/shim/build/ffmpeg-wasm.sh > /work/link.sh && \
+    mkdir /output && bash /work/link.sh -o /output/ffmpeg-core.js
+RUN mkdir /sources && git archive --format=tar.gz --output=/sources/ffmpeg-n5.1.4.tar.gz HEAD && \
+    cd /work/shim && git archive --format=tar.gz --output=/sources/ffmpeg-wasm-source.tar.gz HEAD && \
+    cp /work/ffmpeg/COPYING.LGPLv2.1 /sources/ && cp /work/ffmpeg/COPYING.LGPLv3 /sources/ && \
+    cp /work/shim/LICENSE /sources/LICENSE-shim && \
+    git rev-parse HEAD > /sources/shim-commit.txt && cd /work/ffmpeg && git rev-parse HEAD > /sources/ffmpeg-commit.txt
+FROM scratch
+COPY --from=build /output /runtime
+COPY --from=build /sources /sources

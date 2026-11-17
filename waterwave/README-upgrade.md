@@ -1,0 +1,96 @@
+# Water Wave Lab v2
+
+Original code is MIT licensed, copyright 2026 Kotokowa. The FCD attribution in
+LICENSE-FCD.txt is retained. See the offline package's dependency notices for
+its separately licensed Python runtime and LGPL video decoder.
+
+## Measurement
+
+The final3 pipeline follows `最终版3.zip`: reference-derived intensity/modulation
+thresholds, internal occlusion filling, harmonic displacement bridging, optical
+calibration, full-ROI gradient integration, edge crop, masked quadratic detrending
+and per-pixel temporal RMS. Filled measurements remain NaN outside the valid mask.
+Pixel selection remains zero-based in the original image. Final3 physical axes
+follow the MATLAB saved-field convention `(1:n)*scale`, followed by optional
+inverse coordinate calibration; legacy axes retain `(0:n-1)*scale`.
+
+New sessions default to 30 mm water depth, H scale 1, final3, quadratic detrending,
+masking and both independent empirical calibrations. Importing a v1 selection
+record explicitly selects legacy processing and retains its recorded constants.
+The image sequence default is 100 fps; video metadata takes precedence when available.
+
+RMS is sqrt(mean(h²)), without temporal mean subtraction. dZ uses the fourth
+moment. Lock-in fits cosine, sine and an intercept at the selected frequency,
+with per-pixel valid-sample normal equations and matching covariance. This fixes
+the original lock-in uncertainty and frequency mismatches. It assumes residuals
+are independent for statistical uncertainty; no experimental accuracy bound is claimed.
+
+## Analysis and interchange
+
+MATLAB v7 MAT and pickle-free NPZ support Z/Z_rms/rms, dZ, valid, physical axes,
+configuration and origin metadata. MATLAB v7.3 HDF5 and FIG are not supported.
+No image registration or automatic physical-grid rescaling is performed.
+
+Gaussian, super-Gaussian and core-halo formulas match MATLAB. Fits use bounded
+multi-start Huber optimization and minimum RMSE selection; AICc is diagnostic.
+FWHM uses RMS-amplitude half-height crossings, falling back to the selected model.
+Statistical and coordinate-calibration uncertainties are separate. Monte Carlo
+uses a fixed seed. EE radii integrate model Z² minus the baseline squared over
+valid pixels in the fit window, not an infinite field.
+
+The no-waveplate dynamic reference is distinct from the static grid photograph.
+Only the lens field can use model energy filling inside the integration ellipse;
+the reference is used directly. Gains are relative Z² ratios, not absolute power
+or total efficiency. Missing reference data leaves gains unavailable.
+
+Repeated experiments use arithmetic RMS-field means, common-valid support and
+measurement/repeat uncertainty propagation. A single repeat has no estimate of
+between-repeat uncertainty. Original run IDs are retained. Strict templates use
+{run}, {frame}, {depth}, {freq}, {amp}, {ext}; integer widths are printf-like minimum
+widths, e.g. {run:04d}. Batch end=0 selects through the final frame; repeats=0 uses
+all runs. A run cap uses the numerically smallest IDs, not contiguous renumbering.
+
+## Runtime and RPC
+
+`Session` retains existing frame/finish/dispose calls. New field_import,
+field_average, field_info, field_file, field_export, field_analyze and field_dispose
+calls operate on opaque IDs. artifact_chunk reads at most 4 MiB and
+artifact_dispose releases the artifact. Paths are never accepted from browser RPC.
+Selection schema v2 adds `advanced`; numerical exports carry config and axes.
+Strict batch saves independent run directories under results and persists RMS
+files before releasing each experiment. Focal stages reload saved RMS on demand.
+
+## Offline builds
+
+`.github/workflows/offline.yml` builds the independently replaceable LGPL decoder,
+downloads only the Pyodide dependency closure, and produces native launchers for
+Windows x64, macOS x64/ARM64 and Linux x64/ARM64. The launcher serves only bundled
+assets on a random loopback port. The scientific computation stays in the browser.
+An uncached browser test blocks external requests and exercises Python, MAT/NPZ,
+AVI decoding and the UI before packaging. Artifact sources and licenses are included.
+
+Ed25519 manifests identify official releases; they are not copy protection or a
+restriction on MIT rights. The trusted public key is published with the site.
+Private signing material belongs only in the release secret and an owner backup.
+
+## Numerical validation (2026-11-17)
+
+23 Python tests cover legacy/new known waves, masks, independent calibrations,
+harmonic bridging, RMS, irregular lock-in, repeat statistics, MAT/NPZ, Gaussian
+focus widths, reference gains, dispersion and local AVI round-trip. 23 JavaScript
+tests cover existing website functions and strict naming/repeat handling.
+
+MATLAB R2024b was run against the original extracted final3 functions. A generated
+37×41 test field gave maximum absolute Python/MATLAB differences:
+
+| Operation | Maximum difference |
+|---|---:|
+| Gaussian | 2.22e-16 |
+| Super-Gaussian / core-halo | 4.44e-16 |
+| Gradient integration | 9.77e-15 |
+| Masked quadratic detrending, valid pixels | 4.44e-15 |
+| Temporal RMS / dZ | 2.78e-17 |
+
+These comparisons validate formulas on the tested inputs, not real-experiment
+accuracy. The robust optimizer, morphology and known intentional bug fixes are
+not claimed to be bit-for-bit identical to MATLAB.

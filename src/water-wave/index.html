@@ -75,5 +75,5 @@
 </div></div>
 <section class="method"><h2>从格纹位移到水面高度</h2><p>参考照片 → 双载波傅里叶解调 → 光学表观位移 → 折射模型 → 二维梯度积分。默认使用原 MATLAB 算法的有限差分积分，增加输入校验、可追溯标定和可复用选区。</p><p>适用于清晰、无遮挡的周期格纹与小坡度水面。大幅折射、反光、失焦和透视会影响结果；载波强度不代表误差界限。合成数据验证不能代替真实实验标定。</p><a href="https://doi.org/10.1007/s00348-018-2553-9" target="_blank" rel="noopener noreferrer">FCD 方法 · Wildeman (2018) ↗</a> · <a href="guide.html" target="_blank">使用说明与输出格式 ↗</a></section>
 </main><footer>同一份 Python 算法，本地与浏览器共用。网页版首次从 jsDelivr 下载 Pyodide / NumPy / SciPy / Pillow，导入 AVI 时另加载 FFmpeg 解码器；输入影像只在当前设备处理。关闭页面前请下载结果。</footer>
-<script src="ui-utils.js"></script><script src="app.js"></script>
+<script src="runtime-config.js"></script><script src="ui-utils.js"></script><script src="batch-utils.js"></script><script src="app.js"></script><script src="advanced.js"></script>
 </body></html>

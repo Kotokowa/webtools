@@ -1,12 +1,13 @@
 /* Same Python modules as desktop; runtime is isolated from the UI thread. */
 let runtime;
+importScripts('runtime-config.js');
 async function boot() {
   if (runtime) return runtime;
-  importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');
-  runtime = await loadPyodide({indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/'});
+  importScripts(WATERWAVE_RUNTIME.pyodide + 'pyodide.js');
+  runtime = await loadPyodide({indexURL: WATERWAVE_RUNTIME.pyodide});
   await runtime.loadPackage(['numpy', 'scipy', 'pillow']);
   runtime.FS.mkdirTree('/home/pyodide/waterwave');
-  for (const name of ['__init__.py', 'core.py', 'session.py']) {
+  for (const name of ['__init__.py', 'core.py', 'session.py', 'measurement.py', 'analysis.py', 'fields.py']) {
     const response = await fetch('python/' + name);
     if (!response.ok) throw Error('Python 算法文件缺失：' + name);
     runtime.FS.writeFile('/home/pyodide/waterwave/' + name, await response.text());

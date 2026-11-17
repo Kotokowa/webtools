@@ -1,0 +1,2 @@
+'use strict';
+(async()=>{try{const response=await fetch('offline-releases.json');if(!response.ok)throw Error('离线版尚未发布');const release=await response.json();const list=document.getElementById('packages');for(const asset of release.assets){const row=document.createElement('p'),a=document.createElement('a');a.textContent=asset.label+' · '+(asset.size/1048576).toFixed(1)+' MiB';a.href=asset.url;row.append(a);list.append(row);}}catch(error){document.getElementById('download-status').textContent=error.message;}})();

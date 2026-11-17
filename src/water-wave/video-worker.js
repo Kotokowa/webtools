@@ -4,7 +4,8 @@
  * the whole movie into the WASM heap. One lossless BMP frame is held at a time.
  */
 let core, input, metadata;
-const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/';
+importScripts('runtime-config.js');
+const base = WATERWAVE_RUNTIME.ffmpeg;
 let errors = [];
 function execute(method, ...args) {
   errors = []; core.reset();

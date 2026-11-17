@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class CoreTests(unittest.TestCase):
     def test_known_height_and_scale(self):
         ref, img, truth = synthetic_frame()
-        r = Reconstructor(ref, config=Config(detrend="none"))
+        r = Reconstructor(ref, config=Config(detrend="none", water_depth_mm=20, pipeline="legacy"))
         self.assertAlmostEqual(r.scale, 1.5/8, places=5)
         out = r.restore(img)["height_mm"]
         truth = truth[10:-10, 10:-10]
@@ -34,7 +34,8 @@ class CoreTests(unittest.TestCase):
     def test_identity_is_zero(self):
         ref, _, _ = synthetic_frame()
         result = Reconstructor(ref).restore(ref)
-        self.assertLess(np.max(np.abs(result["height_mm"])), 1e-7)
+        self.assertLess(np.nanmax(np.abs(result["height_mm"])), 1e-7)
+        self.assertTrue(np.isnan(result["height_mm"]).any())
 
     def test_rotated_checkerboard(self):
         y, x = np.indices((320, 384), dtype=float)
@@ -49,7 +50,7 @@ class CoreTests(unittest.TestCase):
         ref, _, _ = synthetic_frame()
         moved = np.roll(ref, (2, 1), axis=(0, 1))
         result = Reconstructor(ref).restore(moved)
-        self.assertLess(np.max(np.abs(result["height_mm"])), .005)
+        self.assertLess(np.nanmax(np.abs(result["height_mm"])), .005)
 
     def test_spectral_integral(self):
         n=128

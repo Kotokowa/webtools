@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: requirements-waterwave.txt
       - run: python -m unittest discover -s tests -p test_nfc_encoder.py -v
       - run: python -m pip install -r requirements-waterwave.txt
-      - run: python -m unittest discover -s tests -p test_waterwave.py -v
+      - run: python -m unittest discover -s tests -p 'test_waterwave*.py' -v
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -10,6 +10,7 @@ const videoPattern = /\.(mp4|avi|mov|mkv|webm|m4v)$/i;
 const refPattern = /^(jt|ref|reference|static|静态|静水|基准)([_.\-\d ]|$)/i;
 const collator = new Intl.Collator('zh', {numeric: true, sensitivity: 'base'});
 const numericConfig = ['water_depth_mm','acrylic_mm','n_water','n_acrylic','n_air','square_mm','mm_per_pixel','edge_crop','filter_ratio','color_limit_mm','fps','temporal_limit_mb'];
+let busyDepth=0;
 function status(text) { $('status').textContent = text; }
 function warning(text) { $('warnings').textContent = text; $('warnings').hidden = !text; }
 function report(error) { warning(String(error.message || error)); status('操作未完成，请检查上方提示。'); }
@@ -19,7 +20,9 @@ function from64(s, name) { const bytes = Uint8Array.from(atob(s), c => c.charCod
 function loadImage(data) { return new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = () => reject(Error('预览图加载失败')); im.src = 'data:image/png;base64,' + data; }); }
 function refreshRun() { $('run').disabled = state.busy || !state.refData || (!state.video && !dynamicFiles().length); }
 function busy(value) {
-  state.busy = value;
+  busyDepth=Math.max(0,busyDepth+(value?1:-1));
+  if ((busyDepth>0)===state.busy) return;
+  value=busyDepth>0;state.busy = value;
   document.querySelectorAll('button,input,select').forEach(el => {
     if (value) { el.dataset.wasDisabled = el.disabled ? '1':'0'; el.disabled = true; }
     else el.disabled = el.dataset.wasDisabled === '1';
@@ -29,6 +32,7 @@ function busy(value) {
 }
 async function detect() {
   try {
+    if(globalThis.WATERWAVE_RUNTIME?.offline)throw Error('offline');
     const r = await fetch('/api/info', {signal: AbortSignal.timeout(2500)});
     state.local = r.ok && (await r.json()).mode === 'local';
   } catch { state.local = false; }
@@ -176,7 +180,7 @@ async function importVideo(file) {
 function config() {
   const out={}; numericConfig.forEach(id=>{const v=Number($(id).value);if (!Number.isFinite(v) || $(id).value==='') throw Error('参数不能为空：'+id);out[id]=v;});
   out.unwrap=$('unwrap').checked;out.remove_mean_displacement=$('remove_mean_displacement').checked;
-  out.detrend=$('detrend').value;out.integration=$('integration').value;return out;
+  out.detrend=$('detrend').value;out.integration=$('integration').value;return Object.assign(out,globalThis.WaterWaveAdvanced?.config()||{});
 }
 function exportsSelected() { return [...document.querySelectorAll('[data-export]:checked')].map(e=>e.dataset.export); }
 function readROI() {
@@ -184,7 +188,7 @@ function readROI() {
   if(!v.every(Number.isInteger)||v[0]<0||v[1]<0||v[2]<64||v[3]<64||v[0]+v[2]>state.width||v[1]+v[3]>state.height) throw Error('范围无效或超出图片；最小 64×64');
   return [v[0],v[1],v[0]+v[2],v[1]+v[3]];
 }
-function settings() { state.roi=readROI();syncROI();draw();return {config:config(),roi:state.roi,geometry:state.geometry,exports:exportsSelected(),reference_name:state.refFile?.name}; }
+function settings() { state.roi=readROI();syncROI();draw();return {config:config(),roi:state.roi,geometry:state.geometry,exports:exportsSelected(),reference_name:state.refFile?.name,advanced:globalThis.WaterWaveAdvanced?.record()}; }
 function syncROI() {
   if (!state.roi) return;
   const [x,y,x1,y1]=state.roi;
@@ -258,18 +262,20 @@ $('full-roi').onclick=()=>{if(state.image){state.roi=[0,0,state.width,state.heig
 $('edge_crop').onchange=draw;
 $('detrend').onchange=()=>{$('detrend-note').textContent=$('detrend').value==='quadratic'?'注意：二次曲面扣除会同时削弱真实长波和大尺度起伏。建议同时导出去趋势前高度。':'恢复的是相对高度；去平面会移除整体倾斜，不能测出绝对水位。';};
 function downloadBlob(blob,name){const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-$('save-record').onclick=catchAction(()=>{if(!state.roi||!state.refFile)throw Error('请先导入参考图');const record={schema:'waterwave-selection-v1',image_size:[state.width,state.height],coordinate_convention:'zero-based original image; ROI [x0,y0,x1,y1) exclusive end',...settings()};downloadBlob(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}),'water-wave-selection.json');});
+$('save-record').onclick=catchAction(()=>{if(!state.roi||!state.refFile)throw Error('请先导入参考图');const record={schema:'waterwave-selection-v2',image_size:[state.width,state.height],coordinate_convention:'zero-based original image; ROI [x0,y0,x1,y1) exclusive end',...settings()};downloadBlob(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}),'water-wave-selection.json');});
 $('load-record').onclick=()=>$('record-file').click();
 $('record-file').onchange=catchAction(async e=>{
   const file=e.target.files[0];if(!file)return;if(!state.image)throw Error('请先导入参考图，再导入范围记录');
   const r=JSON.parse(await file.text());
-  if(r.schema!=='waterwave-selection-v1'||!Array.isArray(r.image_size)||r.image_size[0]!==state.width||r.image_size[1]!==state.height)throw Error('记录格式不匹配或图像尺寸不同；未自动缩放旧坐标');
+  if(!['waterwave-selection-v1','waterwave-selection-v2'].includes(r.schema)||!Array.isArray(r.image_size)||r.image_size[0]!==state.width||r.image_size[1]!==state.height)throw Error('记录格式不匹配或图像尺寸不同；未自动缩放旧坐标');
+  if(r.schema==='waterwave-selection-v1')r.config={pipeline:'legacy',water_depth_mm:20,fps:0,detrend:'plane',masking:false,coordinate_calibration:false,displacement_calibration:false,...r.config};
   // Validate using the same Python rules before changing the UI.
   const check=await rpc({op:'start',data:state.refData,settings:{...r,exports:[]}});await rpc({op:'dispose',session:check.session});
   state.roi=r.roi;state.geometry=r.geometry||{lines:[],points:[]};state.history=[];
   for(const id of numericConfig)if(r.config?.[id]!==undefined)$(id).value=r.config[id];
   for(const id of ['unwrap','remove_mean_displacement'])if(r.config?.[id]!==undefined)$(id).checked=r.config[id];
   for(const id of ['detrend','integration'])if(r.config?.[id]!==undefined)$(id).value=r.config[id];
+  globalThis.WaterWaveAdvanced?.restoreRecord(r);
   if(r.exports)document.querySelectorAll('[data-export]').forEach(el=>el.checked=!el.disabled&&r.exports.includes(el.dataset.export));
   syncROI();draw();$('detrend').onchange();status('已导入选区、线点、物理参数和导出选项。');warning('');
 });
@@ -291,6 +297,7 @@ async function videoFrame(item){
 }
 async function finish(partial){
   const result=await rpc({op:'finish',session:state.session,partial});
+  if(result.field)globalThis.WaterWaveAdvanced?.addField(result.field,state.resultName.replace(/\.zip$/i,''));
   if(state.downloadUrl){URL.revokeObjectURL(state.downloadUrl);state.downloadUrl=null;}
   $('download').download=state.resultName;
   if(state.local)$('download').href='/api/download?session='+state.session+'&filename='+encodeURIComponent(state.resultName);
