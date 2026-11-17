@@ -17,9 +17,9 @@ RUN sed 's/emmake make -j$/emmake make -j2/' /work/shim/build/ffmpeg.sh > /work/
     --enable-decoder=rawvideo,mjpeg,mjpegb,mpeg4,h264,hevc,ffv1,huffyuv,ffvhuff,utvideo,vp8,vp9,av1,png,bmp,msmpeg4v2,msmpeg4v3,wmv1,wmv2,wmv3,dvvideo,mpeg1video,mpeg2video,v210 \
     --enable-parser=h264,hevc,mpeg4video,mjpeg,vp8,vp9,av1,mpegvideo \
     --enable-filter=scale,format,null,buffer,buffersink,trim,setpts
-RUN cp -r /work/shim/src/bind src/ && cp -r /work/shim/src/fftools src/ && \
+RUN mkdir -p src /output && cp -r /work/shim/src/bind src/ && cp -r /work/shim/src/fftools src/ && \
     sed '/-lpostproc/d' /work/shim/build/ffmpeg-wasm.sh > /work/link.sh && \
-    mkdir /output && bash /work/link.sh -o /output/ffmpeg-core.js
+    bash /work/link.sh -o /output/ffmpeg-core.js
 RUN mkdir /sources && git archive --format=tar.gz --output=/sources/ffmpeg-n5.1.4.tar.gz HEAD && \
     cd /work/shim && git archive --format=tar.gz --output=/sources/ffmpeg-wasm-source.tar.gz HEAD && \
     cp /work/ffmpeg/COPYING.LGPLv2.1 /sources/ && cp /work/ffmpeg/COPYING.LGPLv3 /sources/ && \

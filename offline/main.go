@@ -51,7 +51,7 @@ func main() {
  handler:=http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
   if r.Host!=host || (r.Method!="GET"&&r.Method!="HEAD"){http.Error(w,"Forbidden",403);return}
   w.Header().Set("X-Content-Type-Options","nosniff")
-  w.Header().Set("Content-Security-Policy","default-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:; img-src 'self' blob: data:")
+  w.Header().Set("Content-Security-Policy","default-src 'self' blob: data:; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:; img-src 'self' blob: data:")
   if r.URL.Path=="/offline-status"{w.Header().Set("Content-Type","application/json");json.NewEncoder(w).Encode(map[string]string{"author":"kotokowa","website":website,"integrity":integrity});return}
   if strings.Contains(r.URL.Path,"\\") {http.Error(w,"Forbidden",403);return}
   path:=filepath.Join(content,filepath.FromSlash(r.URL.Path))
