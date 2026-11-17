@@ -68,6 +68,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
       - run: npm install --no-save --package-lock=false playwright
       - run: npx playwright install --with-deps chromium
+      - run: python tests/focal-fixture.py
       - run: node tests/offline-smoke.cjs package
       - run: python scripts/offline-zip.py package waterwave-${{ matrix.os }}-${{ matrix.arch }}.zip
       - uses: actions/upload-artifact@v4
