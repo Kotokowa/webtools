@@ -11,6 +11,11 @@ const {chromium}=require('playwright');const {aviFixture}=require('./avi-fixture
   const page=await context.newPage();const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));await page.goto(url);
   const health=await (await fetch(url+'/offline-status')).json();assert.equal(health.integrity,'verified');
   assert.equal(await page.locator('footer a').getAttribute('href'),'https://kotokowa.github.io/webtools/water-wave/');
+  const guide=await context.newPage();await guide.goto(url+'/guide.html');
+  assert.equal(await guide.locator('#toc nav a').count(),15);
+  await guide.locator('img').evaluateAll(images=>images.forEach(img=>img.loading='eager'));
+  await guide.waitForFunction(()=>[...document.images].every(img=>img.complete&&img.naturalWidth>0));
+  assert.equal(await guide.locator('img').count(),6);await guide.close();
   const restored=await page.evaluate(async()=>{
    const worker=new Worker('worker.js');let seq=0;const pending=new Map();worker.onmessage=({data})=>{const p=pending.get(data.id);if(!p)return;pending.delete(data.id);data.error?p.reject(Error(data.error)):p.resolve(data.result);};const call=message=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});worker.postMessage({id,message});});
    try{await call({op:'boot'});const ref=await call({op:'demo',reference:true});const image=await call({op:'demo',phase:.2});const s=await call({op:'start',data:ref.data,settings:{config:{water_depth_mm:20,masking:false,coordinate_calibration:false,displacement_calibration:false},exports:['rms_npz','rms_mat']}});await call({op:'frame',session:s.session,data:image.data,name:'demo_0001.png',frame_id:1,time_s:0});const result=await call({op:'finish',session:s.session});const bytes=await call({op:'artifact_chunk',artifact:result.artifact,offset:0});return {size:result.size,shape:result.field.shape,chunk:bytes.size};}finally{worker.terminate();}
@@ -28,6 +33,6 @@ const {chromium}=require('playwright');const {aviFixture}=require('./avi-fixture
   await page.locator('#focus-x').fill('0');await page.locator('#focus-y').fill('12.6');await page.locator('#focus-save').click();await page.locator('#focus-analyze').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='聚焦分析完成',null,{timeout:180000});
   const metrics=JSON.parse(await page.locator('#focal-metrics').textContent());assert(Math.abs(metrics.fit_gain.line_gain-4)<.01);assert(Math.abs(metrics.fit_gain.area_gain-4)<.01);
   assert.deepEqual(pageErrors,[]);assert.deepEqual(external,[]);
-  console.log('PASS: native launcher, signature, fresh offline Python/RMS/MAT, AVI, UI recovery, directory batch writes, manual focus and reference gain, no external requests');
+  console.log('PASS: native launcher, signature, illustrated guide, fresh offline Python/RMS/MAT, AVI, UI recovery, directory batch writes, manual focus and reference gain, no external requests');
  }finally{if(browser)await browser.close();proc.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
