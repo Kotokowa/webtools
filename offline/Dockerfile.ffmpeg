@@ -2,13 +2,15 @@ FROM emscripten/emsdk:3.1.40 AS build
 ENV FFMPEG_ST=yes
 ENV INSTALL_DIR=/opt
 ENV CFLAGS="-O3"
+ENV CXXFLAGS="-O3"
 ENV LDFLAGS="-O3"
 WORKDIR /work
 RUN git init shim && cd shim && git remote add origin https://github.com/ffmpegwasm/ffmpeg.wasm.git && \
     git fetch --depth 1 origin f876f907c7e9b9bf51d4ed0b913a855a63ae63fc && git checkout FETCH_HEAD && cd .. && \
     git clone --depth 1 --branch n5.1.4 https://github.com/FFmpeg/FFmpeg.git ffmpeg
 WORKDIR /work/ffmpeg
-RUN bash /work/shim/build/ffmpeg.sh --disable-gpl --disable-nonfree --disable-network --disable-everything \
+RUN sed 's/emmake make -j$/emmake make -j2/' /work/shim/build/ffmpeg.sh > /work/configure.sh && \
+    bash /work/configure.sh --disable-gpl --disable-nonfree --disable-network --disable-everything \
     --enable-protocol=file --enable-avfilter --enable-swscale \
     --enable-demuxer=avi,mov,matroska,image2,bmp_pipe \
     --enable-muxer=image2 --enable-encoder=bmp \

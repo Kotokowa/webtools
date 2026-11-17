@@ -30,7 +30,8 @@ def valid_mask(image, cfg, thresholds=None):
 def fill_pattern(image, reference, holes, carriers, ring=20):
     if not holes.any():
         return image.copy(), False
-    surrounding = ndimage.binary_dilation(holes, iterations=ring) & ~holes
+    ry, rx = np.ogrid[-ring:ring+1, -ring:ring+1]
+    surrounding = ndimage.binary_dilation(holes, structure=rx*rx+ry*ry <= ring*ring) & ~holes
     y, x = np.indices(image.shape)
     basis = [np.ones(image.shape)]
     for k in carriers:
@@ -38,11 +39,11 @@ def fill_pattern(image, reference, holes, carriers, ring=20):
         basis.extend([np.cos(phase), np.sin(phase)])
     ids = np.flatnonzero(surrounding)[::max(1, int(surrounding.sum())//60000)]
     out = image.copy()
-    if len(ids) < 10:
+    if len(ids) < 50:
         out[holes] = reference[holes]
         return out, True
     design = np.stack([a.ravel()[ids] for a in basis], axis=1)
-    coeff, _, rank, _ = np.linalg.lstsq(design, image.ravel()[ids], rcond=None)
+    coeff, _, rank, _ = np.linalg.lstsq(design, reference.ravel()[ids], rcond=None)
     if rank < len(basis):
         out[holes] = reference[holes]
         return out, True

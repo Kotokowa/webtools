@@ -52,6 +52,8 @@ class Config:
     rms_min_fraction: float = .8
     lockin: bool = False
     frequency_hz: float = 6.0
+    excitation_amplitude: float = 0.0
+    amplitude_unit: str = 'V'
 
     def validate(self):
         for key, value in asdict(self).items():
@@ -59,6 +61,8 @@ class Config:
                 raise ValueError(f"{key} 必须为有限数值")
         if self.pipeline not in ("final3", "legacy"):
             raise ValueError("未知算法版本")
+        if self.excitation_amplitude < 0 or not isinstance(self.amplitude_unit, str) or not self.amplitude_unit.strip():
+            raise ValueError("激励振幅或单位无效")
         if min(self.height_scale, self.cal_x_slope, self.cal_y_slope) <= 0:
             raise ValueError("标定系数须大于 0")
         for key in ("mask_window", "mask_min_blob", "mask_grow", "mask_guard", "fill_ring"):

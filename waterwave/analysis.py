@@ -7,6 +7,8 @@ from scipy.interpolate import RegularGridInterpolator
 
 
 def clean(value):
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
     if isinstance(value, dict):
         return {str(k): clean(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, np.ndarray)):
@@ -60,6 +62,17 @@ def load_field(data, name):
     cfg = obj.get('config_json', '{}')
     if isinstance(cfg, np.ndarray): cfg = str(cfg.item())
     if not isinstance(cfg, str): cfg = '{}'
+    if cfg == '{}':
+        old = obj.get('cfg', {}); stats = obj.get('stats', {})
+        old = old if isinstance(old, dict) else {}; stats = stats if isinstance(stats, dict) else {}
+        mapped = {}
+        for source, target in [('h_water', 'water_depth_mm'), ('H_scale', 'height_scale'), ('nw', 'n_water'), ('np', 'n_acrylic'), ('na', 'n_air')]:
+            value = stats.get(source, old.get(source))
+            if value is not None and np.isscalar(value): mapped[target] = float(value)
+        if old.get('T_wave') is not None and np.isscalar(old['T_wave']) and old['T_wave'] > 0:
+            mapped['frequency_hz'] = 1/float(old['T_wave'])
+        if 'xy_cal_applied' in obj: mapped['coordinate_calibration'] = bool(obj['xy_cal_applied'])
+        cfg = json.dumps(mapped)
     return dict(Z=z, dZ=dz, valid=valid, X_cm=np.asarray(xv, float), Y_cm=np.asarray(yv, float),
                 config_json=cfg, source=name)
 
@@ -69,9 +82,12 @@ def compatible(a, b):
         if a[key].shape != b[key].shape or not np.allclose(a[key], b[key], atol=1e-7, rtol=1e-5):
             raise ValueError('RMS 物理坐标不一致，不能自动缩放或对齐')
     ca, cb = json.loads(str(a.get('config_json', '{}'))), json.loads(str(b.get('config_json', '{}')))
-    for key in ('water_depth_mm', 'frequency_hz', 'height_scale', 'coordinate_calibration', 'displacement_calibration'):
-        if key in ca and key in cb and ca[key] != cb[key]:
-            raise ValueError('RMS 标定或工况不一致：'+key)
+    for key in ('water_depth_mm', 'frequency_hz', 'height_scale', 'coordinate_calibration', 'displacement_calibration',
+                'excitation_amplitude', 'amplitude_unit'):
+        if key in ca and key in cb:
+            va, vb = ca[key], cb[key]
+            same = np.isclose(va, vb, rtol=1e-8, atol=1e-10) if isinstance(va, (float, int)) and isinstance(vb, (float, int)) else va == vb
+            if not same: raise ValueError('RMS 标定或工况不一致：'+key)
 
 
 def average_fields(fields):
@@ -162,20 +178,33 @@ def analyze(field, center, options=None, reference=None):
     z, dz = field['Z'], field['dZ']
     region = (abs(x-xc) <= half) & (abs(y-yc) <= half) & field['valid']
     if region.sum() < 30: raise ValueError('焦点搜索区有效数据不足')
+    if np.ptp(z[region]) < 1e-12: raise ValueError('焦点搜索区没有可分辨的主峰')
     smoothed = ndimage.gaussian_filter(np.nan_to_num(z), 1)/np.maximum(ndimage.gaussian_filter(field['valid'].astype(float), 1), 1e-12)
     peak = np.unravel_index(np.argmax(np.where(region, smoothed, -np.inf)), z.shape)
     px, py = float(x[peak]), float(y[peak])
     baseline = float(np.percentile(z[region], 10)); amp = max(float(z[region].max()-baseline), 1e-9)
     # MATLAB's soft weights are binary: retain main lobe and low background.
     intervals = []
-    for profile, pos in ((smoothed[peak[0], :], peak[1]), (smoothed[:, peak[1]], peak[0])):
+    profile_smooth = ndimage.uniform_filter(np.where(field['valid'], z, np.nanmean(z)), 3, mode='constant')
+    for profile, pos in ((profile_smooth[peak[0], :], peak[1]), (profile_smooth[:, peak[1]], peak[0])):
         minima = signal.find_peaks(-profile)[0]
         left, right = minima[minima < pos], minima[minima > pos]
         intervals.append((left[-1] if len(left) else 0, right[0] if len(right) else len(profile)-1))
     (xl, xr), (yl, yr) = intervals
-    core = (x >= field['X_cm'][xl]) & (x <= field['X_cm'][xr]) & (y >= field['Y_cm'][yl]) & (y <= field['Y_cm'][yr])
-    fitting = region & (core | (z <= baseline+.1*amp))
-    if fitting.sum() < 30: fitting = region.copy()
+    fitting = region.copy()
+    for outside, boundary, enabled in ((x < field['X_cm'][xl], z[peak[0], xl], xl > 0),
+                                       (x > field['X_cm'][xr], z[peak[0], xr], xr < z.shape[1]-1),
+                                       (y < field['Y_cm'][yl], z[yl, peak[1]], yl > 0),
+                                       (y > field['Y_cm'][yr], z[yr, peak[1]], yr < z.shape[0]-1)):
+        if enabled and np.isfinite(boundary): fitting &= ~(outside & (z > boundary))
+    if fitting.sum() < 200:
+        labels, _ = ndimage.label(region & (z*z >= .5*smoothed[peak]**2))
+        label = labels[peak]
+        if label:
+            core = ndimage.binary_dilation(labels == label, iterations=10) & region
+            ring = ndimage.binary_dilation(core, iterations=10) & region & ~core & (z <= baseline+.1*amp)
+            fitting = core | ring
+    if fitting.sum() < 30: raise ValueError('主峰拟合区有效数据不足')
     ids = np.flatnonzero(fitting)[::max(1, int(np.ceil(fitting.sum()/int(opts['fit_samples']))))]
     xx, yy, zz = x.ravel()[ids], y.ravel()[ids], z.ravel()[ids]
     pixel = min(np.median(np.diff(field['X_cm'])), np.median(np.diff(field['Y_cm'])))

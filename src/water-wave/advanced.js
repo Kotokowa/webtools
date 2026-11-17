@@ -39,7 +39,7 @@
   if(WATERWAVE_RUNTIME.offline){offline.remove();$('home-link').removeAttribute('href');$('home-link').hidden=true;const foot=document.querySelector('footer');foot.replaceChildren();const link=document.createElement('a');link.textContent='kotokowa · 在线版';link.href='https://kotokowa.github.io/webtools/water-wave/';link.target='_blank';link.rel='noopener';foot.append(link);}
   const entries=[], centers=new Map();let root, referenceRoot, tasks=[], referenceTasks=[], current=null, commonReference=null, rawFiles=[], rawStatic=null, outputRoot=null;
   const recordIds=['batch-variable','batch-amp','batch-unit','batch-format','static-format','batch-extensions','batch-repeats','batch-start','batch-end','batch-stride','reference-format','reference-static-format','reference-rms-format','focus-half','focus-line','focus-axis-a','focus-axis-b','focus-angle'];
-  function advancedConfig(){const c={pipeline:$('pipeline').value};for(const id of Object.keys(numeric))c[id]=readCoordinate($(id));for(const id of Object.keys(booleans))c[id]=$(id).checked;return c;}
+  function advancedConfig(){const c={pipeline:$('pipeline').value,excitation_amplitude:readCoordinate($('batch-amp')),amplitude_unit:$('batch-unit').value};for(const id of Object.keys(numeric))c[id]=readCoordinate($(id));for(const id of Object.keys(booleans))c[id]=$(id).checked;return c;}
   function record(){return {settings:Object.fromEntries(recordIds.map(id=>[id,$(id).value])),centers:Object.fromEntries(centers),fill_model:$('focus-fill').checked,auto_angle:$('focus-auto-angle').checked};}
   function restoreRecord(r){for(const id of Object.keys(numeric))$(id).value=r.config?.[id]??numeric[id][0];for(const id of Object.keys(booleans))$(id).checked=r.config?.[id]??booleans[id][0];$('pipeline').value=r.config?.pipeline||'final3';for(const id of recordIds)if(r.advanced?.settings?.[id]!==undefined)$(id).value=r.advanced.settings[id];if(r.advanced?.centers)for(const [key,value] of Object.entries(r.advanced.centers))centers.set(key,value);if(r.advanced?.fill_model!==undefined)$('focus-fill').checked=r.advanced.fill_model;if(r.advanced?.auto_angle!==undefined)$('focus-auto-angle').checked=r.advanced.auto_angle;}
   function addField(info,name,extra={}){if(info.field&&entries.some(e=>e.field===info.field))return;entries.push({...info,name,...extra});const opt=new Option(name,String(entries.length-1));$('focal-condition').add(opt);$('focal-condition').value=String(entries.length-1);showField(entries.length-1);}
@@ -82,7 +82,7 @@
     const ref=task.staticFile||await task.reference.handle.getFile();const data=await b64(ref);let session,video,done=0;
     const files=task.files||await Promise.all(task.entries.map(e=>e.handle.getFile()));
     options=structuredClone(options);options.reference_name=ref.name;options.exports=options.exports.filter(e=>e!=='video');
-    if(task.values){options.config.water_depth_mm=task.values.depth;options.config.frequency_hz=task.values.freq;}
+    if(task.values){options.config.water_depth_mm=task.values.depth;options.config.frequency_hz=task.values.freq;options.config.excitation_amplitude=task.values.amp;}
     try{
       let frames;
       if(files.length===1&&videoPattern.test(files[0].name)){video=await decoder(files[0]);options.config.fps=video.info.fps;frames=Array.from({length:video.info.count},(_,i)=>({index:i,id:i+1}));}
