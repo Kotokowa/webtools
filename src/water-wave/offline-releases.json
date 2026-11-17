@@ -1,0 +1,36 @@
+{
+  "version": "waterwave-v2.0.2",
+  "release": "https://github.com/Kotokowa/webtools/releases/tag/waterwave-v2.0.2",
+  "assets": [
+    {
+      "label": "Windows · x64",
+      "name": "waterwave-windows-amd64.zip",
+      "size": 45340814,
+      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.0.2/waterwave-windows-amd64.zip"
+    },
+    {
+      "label": "macOS · Intel",
+      "name": "waterwave-darwin-amd64.zip",
+      "size": 45311114,
+      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.0.2/waterwave-darwin-amd64.zip"
+    },
+    {
+      "label": "macOS · Apple Silicon",
+      "name": "waterwave-darwin-arm64.zip",
+      "size": 45135670,
+      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.0.2/waterwave-darwin-arm64.zip"
+    },
+    {
+      "label": "Linux · x64",
+      "name": "waterwave-linux-amd64.zip",
+      "size": 45279241,
+      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.0.2/waterwave-linux-amd64.zip"
+    },
+    {
+      "label": "Linux · ARM64",
+      "name": "waterwave-linux-arm64.zip",
+      "size": 45057569,
+      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.0.2/waterwave-linux-arm64.zip"
+    }
+  ]
+}
