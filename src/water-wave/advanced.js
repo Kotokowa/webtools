@@ -13,7 +13,7 @@
   const batchPanel=document.createElement('section');batchPanel.className='panel';
   batchPanel.innerHTML=`<h2>本地批处理</h2><button id="batch-directory">选择本地实验数据目录</button><div class="directory-row" id="batch-root-row"><span id="batch-root-name"></span><button type="button" class="directory-clear" id="batch-root-clear" aria-label="解除实验数据目录" title="解除关联" hidden>×</button></div>
     <label>变量<select id="batch-variable"><option value="depth">水深</option><option value="freq">频率</option><option value="amp">振幅</option></select></label>
-    ${input('batch-amp','振幅',0)}${input('batch-unit','振幅单位','V','text')}
+    ${input('batch-amp','振幅',0)}${input('batch-unit','振幅单位','mm','text')}
     ${input('batch-format','实验格式','{run}_{depth}mm.avi','text')}${input('static-format','静水格式','{run}_jt.tiff','text')}
     ${input('batch-extensions','文件扩展名','avi,mp4,mov,mkv,webm,tif,tiff,png,jpg,jpeg,bmp,mat,npz','text')}
     ${input('batch-repeats','重复次数',0)}<div class="three">${input('batch-start','起始序号',1)}${input('batch-end','结束序号',0)}${input('batch-stride','间隔',1)}</div>

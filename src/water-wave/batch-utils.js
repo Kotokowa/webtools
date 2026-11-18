@@ -25,7 +25,7 @@
     for(const entry of entries){const v=reference.match(entry.path);if(v)statics.push({...entry,values:v});}
     for(const entry of entries){
       const v=dynamic.match(entry.path);if(!v)continue;
-      const c={...defaults,...v};const condition=JSON.stringify([c.depth,c.freq,c.amp,options.amplitudeUnit||'V']);
+      const c={...defaults,...v};const condition=JSON.stringify([c.depth,c.freq,c.amp,options.amplitudeUnit||'mm']);
       const key=condition+':'+v.run;
       if(!groups.has(key))groups.set(key,{key,condition,values:c,run:v.run,runText:v.run_text,entries:[],errors:[]});
       groups.get(key).entries.push({...entry,values:v});
