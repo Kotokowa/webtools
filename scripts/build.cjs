@@ -19,7 +19,7 @@ fs.copyFileSync(path.join(root, 'examples/nfc-v5.json'), path.join(root, 'dist/n
 const waveDest = path.join(root, 'dist/water-wave');
 fs.cpSync(path.join(root, 'src/water-wave'), waveDest, { recursive: true });
 fs.mkdirSync(path.join(waveDest, 'python'), { recursive: true });
-for (const name of ['__init__.py', 'core.py', 'session.py', 'measurement.py', 'analysis.py', 'fields.py']) {
+for (const name of ['__init__.py', 'core.py', 'session.py', 'measurement.py', 'analysis.py', 'fields.py', 'colors.py', 'colormaps.json']) {
   fs.copyFileSync(path.join(root, 'waterwave', name), path.join(waveDest, 'python', name));
 }
 fs.copyFileSync(path.join(root, 'waterwave/LICENSE-FCD.txt'), path.join(waveDest, 'LICENSE-FCD.txt'));

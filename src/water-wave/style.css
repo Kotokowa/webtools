@@ -5,3 +5,27 @@
 /* Water-wave-only batch and focal controls. */
 .focal-view{position:relative;max-width:100%;width:fit-content;overflow:hidden}.focal-view img{display:block;max-width:100%;cursor:crosshair}.focal-view span{position:absolute;transform:translate(-50%,-50%);color:#fff;text-shadow:0 0 3px #000;font-size:28px;pointer-events:none}#focal-metrics{max-height:24rem;overflow:auto;font-size:12px;white-space:pre-wrap}#batch-list{max-height:15rem;overflow:auto;font-size:12px;overflow-wrap:anywhere}#repeat-notice{position:fixed;right:1rem;bottom:1rem;z-index:100;background:#eef8ff;color:#14374b;padding:1rem;border:1px solid #89baca;border-radius:8px;box-shadow:0 3px 15px #0002}
 .focal-view{width:min(100%,640px)}.focal-view img{width:100%;height:auto}
+
+/* Task navigation and progressive disclosure are confined to the water-wave page. */
+.intro{margin-bottom:16px;gap:16px}.intro h1{font-size:24px;margin:0 0 6px}.intro .eyebrow{display:none}.intro p{margin:0;font-size:12px}
+.task-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 20px;align-items:stretch}
+.task-nav button{padding:15px 8px;background:#fff;font-weight:600;border:1px solid #c8dce3;border-radius:10px;font-size:14px}
+.task-nav button[aria-pressed=true]{background:#e8f5f4;color:#066c78;border-color:#087e8b;box-shadow:inset 0 -3px #087e8b}
+.panel:has(>.module){padding:0}.module{margin:0;padding:0;border:0}.module>summary{padding:17px 20px;font-size:15px;font-weight:650;color:var(--ink)}
+.module[open]>summary{border-bottom:1px solid #edf1f4}.module-body{padding:16px 20px}.module-body>.section-head:empty{display:none}
+.module-body .section-head{justify-content:flex-end}.module-body>.two:first-child label{margin-top:0}
+.option-group>summary{font-size:12px;font-weight:600}.option-group[open]>summary{margin-bottom:12px}
+.option-group .two{margin-top:8px}.option-group .file-button{margin-top:8px!important}
+#source-options .import-grid:has(>label[hidden]){grid-template-columns:1fr}
+.output-options{flex-wrap:wrap;gap:16px;align-items:flex-start}.output-options>label{flex:1 1 140px;max-width:260px}
+#color-sample{height:9px;margin-top:7px;border-radius:3px}
+.export-item{padding:10px}.export-item small{line-height:1.4}#more-exports{margin:12px 0 0;padding-bottom:10px}
+.focal-view{width:min(100%,360px);margin:14px auto}.focal-view img:not([src]){display:none}
+#focus-options{margin-bottom:14px}#focal-summary{margin:14px 0}#full-metrics{margin-bottom:0}
+.method{margin-top:0;padding-top:0;border:0}.layout{align-items:start}aside{gap:12px}.workspace{gap:12px}
+@media(max-width:730px){
+ .task-nav{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.task-nav button{font-size:12px;padding:12px 5px}
+ .intro h1{font-size:20px}.intro>div>p{display:none}.module>summary{padding:14px 15px}.module-body{padding:14px 15px}
+ .output-options{gap:10px}.output-options>label{max-width:none;flex:1 1 120px}
+ header nav a:last-child{display:inline}header nav .badge{display:none}
+}

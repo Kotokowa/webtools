@@ -142,6 +142,7 @@ async function setReference(file, external=false) {
   if (changed || !state.roi) { state.roi=[0,0,state.width,state.height]; state.geometry={lines:[],points:[]}; state.history=[]; }
   $('ref-info').textContent=`参考：${file.name} · ${info.width} × ${info.height} px。${changed?'已重置范围，请框选或导入记录。':'已保留原尺寸范围记录。'}`;
   $('empty-state').hidden=true; syncROI(); draw(); updateCount();
+  globalThis.WaterWaveLayout?.referenceReady();
   status('参考图已就绪。框选无遮挡格纹范围，按需添加剖面线与采样点。');
 }
 async function importVideo(file) {
@@ -180,7 +181,7 @@ async function importVideo(file) {
 function config() {
   const out={}; numericConfig.forEach(id=>{const v=Number($(id).value);if (!Number.isFinite(v) || $(id).value==='') throw Error('参数不能为空：'+id);out[id]=v;});
   out.unwrap=$('unwrap').checked;out.remove_mean_displacement=$('remove_mean_displacement').checked;
-  out.detrend=$('detrend').value;out.integration=$('integration').value;return Object.assign(out,globalThis.WaterWaveAdvanced?.config()||{});
+  out.detrend=$('detrend').value;out.integration=$('integration').value;out.colormap=$('colormap').value;return Object.assign(out,globalThis.WaterWaveAdvanced?.config()||{});
 }
 function exportsSelected() { return [...document.querySelectorAll('[data-export]:checked')].map(e=>e.dataset.export); }
 function readROI() {
@@ -275,8 +276,11 @@ $('record-file').onchange=catchAction(async e=>{
   for(const id of numericConfig)if(r.config?.[id]!==undefined)$(id).value=r.config[id];
   for(const id of ['unwrap','remove_mean_displacement'])if(r.config?.[id]!==undefined)$(id).checked=r.config[id];
   for(const id of ['detrend','integration'])if(r.config?.[id]!==undefined)$(id).value=r.config[id];
+  $('colormap').value=r.config?.colormap||'jet';
   globalThis.WaterWaveAdvanced?.restoreRecord(r);
   if(r.exports)document.querySelectorAll('[data-export]').forEach(el=>el.checked=!el.disabled&&r.exports.includes(el.dataset.export));
+  globalThis.WaterWaveLayout?.refreshExports();
+  await globalThis.WaterWaveLayout?.recolor();
   syncROI();draw();$('detrend').onchange();status('已导入选区、线点、物理参数和导出选项。');warning('');
 });
 function selectedFrames(){
@@ -352,6 +356,6 @@ $('ref-file').onchange=catchAction(e=>{if(e.target.files[0])return setReference(
 $('video-file').onchange=catchAction(e=>{if(e.target.files[0])return importFiles([e.target.files[0]]);});
 $('fps').onchange=()=>{if(state.video?.element){const fps=Number($('fps').value);if(fps>0){state.video.fps=fps;state.video.count=Math.floor(state.video.element.duration*fps);updateCount();}}else if(state.video?.key||state.video?.decoder){$('fps').value=state.video.fps;warning('该视频帧率从文件读取；若元数据不正确，请先修正视频时间信息。');}};
 $('demo').onclick=catchAction(async()=>{
-  busy(true);try{status('生成已知高度的合成棋盘格序列…');const ref=await rpc({op:'demo',reference:true});const files=[from64(ref.data,'reference.png')];for(let i=0;i<12;i++){const r=await rpc({op:'demo',phase:i*Math.PI/6});files.push(from64(r.data,`demo_${String(i+1).padStart(4,'0')}.png`));}await importFiles(files);$('fps').value=12;$('water_depth_mm').value=20;$('acrylic_mm').value=10;$('square_mm').value=1.5;$('mm_per_pixel').value=0;$('n_water').value=1.33;$('n_acrylic').value=1.49;$('n_air').value=1.00029;$('edge_crop').value=10;$('filter_ratio').value=1;$('unwrap').checked=true;$('integration').value='difference';$('remove_mean_displacement').checked=true;$('detrend').value='plane';$('color_limit_mm').value=.4;state.roi=[0,0,256,256];state.geometry={lines:[[[20,128],[235,128]]],points:[[128,128]]};state.history=['lines','points'];document.querySelectorAll('[data-export]').forEach(el=>el.checked=['height_npz','height_png','lines','points'].includes(el.dataset.export));syncROI();draw();status('合成示例已就绪：12 帧、峰值高度 0.3 mm。点击“开始恢复波场”。');}finally{busy(false);}
+  busy(true);try{status('生成已知高度的合成棋盘格序列…');const ref=await rpc({op:'demo',reference:true});const files=[from64(ref.data,'reference.png')];for(let i=0;i<12;i++){const r=await rpc({op:'demo',phase:i*Math.PI/6});files.push(from64(r.data,`demo_${String(i+1).padStart(4,'0')}.png`));}await importFiles(files);$('fps').value=12;$('water_depth_mm').value=20;$('acrylic_mm').value=10;$('square_mm').value=1.5;$('mm_per_pixel').value=0;$('n_water').value=1.33;$('n_acrylic').value=1.49;$('n_air').value=1.00029;$('edge_crop').value=10;$('filter_ratio').value=1;$('unwrap').checked=true;$('integration').value='difference';$('remove_mean_displacement').checked=true;$('detrend').value='plane';$('color_limit_mm').value=.4;state.roi=[0,0,256,256];state.geometry={lines:[[[20,128],[235,128]]],points:[[128,128]]};state.history=['lines','points'];document.querySelectorAll('[data-export]').forEach(el=>el.checked=['height_npz','height_png','lines','points','focal_line','focal_area'].includes(el.dataset.export));globalThis.WaterWaveLayout?.refreshExports();syncROI();draw();status('合成示例已就绪：12 帧、峰值高度 0.3 mm。点击“开始恢复波场”。');}finally{busy(false);}
 });
 new ResizeObserver(draw).observe($('canvas').parentElement);draw();

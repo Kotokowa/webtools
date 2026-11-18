@@ -18,11 +18,12 @@ from .core import Config, Reconstructor, sample_geometry, synthetic_frame
 from . import __version__
 from .measurement import RMSAccumulator
 from .analysis import clean
+from .colors import color_rgb
 from .fields import save_field, describe, write_field_exports, dispatch_field, artifact
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 EXPORTS = {"height_npz", "raw_npz", "height_csv", "height_png", "displacement", "quality", "lines", "points", "temporal", "spectrum", "wavelength", "video"}
-EXPORTS |= {"rms_npz", "rms_mat", "rms_png", "rms_csv", "focal"}
+EXPORTS |= {"rms_npz", "rms_mat", "rms_png", "rms_csv", "focal", "focal_line", "focal_area"}
 
 
 def natural_key(name):
@@ -52,11 +53,10 @@ def image_preview(a):
     return base64.b64encode(png_bytes(im)).decode()
 
 
-def field_image(field, limit, *, title="Elevation (mm)", scale=None, positive=False, annotate=False, axes=None):
+def field_image(field, limit, *, title="Elevation (mm)", scale=None, positive=False, annotate=False, axes=None, colormap='jet'):
     a = np.asarray(field)
     t = np.nan_to_num(np.clip(a/limit if positive else (a/limit+1)/2, 0, 1), nan=0)
-    stops = np.array([[27, 66, 122], [56, 140, 178], [241, 246, 247], [234, 147, 91], [165, 44, 47]])
-    rgb = np.stack([np.interp(t, np.linspace(0, 1, len(stops)), stops[:, c]) for c in range(3)], axis=-1).astype(np.uint8)
+    rgb = color_rgb(t, colormap)
     rgb[~np.isfinite(a)] = [150, 150, 150]
     im = Image.fromarray(rgb)
     if not annotate:
@@ -67,7 +67,7 @@ def field_image(field, limit, *, title="Elevation (mm)", scale=None, positive=Fa
     out.paste(im, (48, 32))
     draw = ImageDraw.Draw(out)
     draw.text((48, 9), title, fill="#243746")
-    bar = field_image(np.linspace(limit, 0 if positive else -limit, im.height)[:, None].repeat(16, axis=1), limit, positive=positive)
+    bar = field_image(np.linspace(limit, 0 if positive else -limit, im.height)[:, None].repeat(16, axis=1), limit, positive=positive, colormap=colormap)
     out.paste(bar, (im.width+62, 32))
     for frac in (0, .5, 1):
         val = limit*(1-frac) if positive else limit*(1-2*frac)
@@ -200,7 +200,7 @@ class Session:
                 with io.TextIOWrapper(binary, encoding="utf-8", newline="") as f:
                     np.savetxt(f, h, delimiter=",", fmt="%.7g", header="height_mm; rows=y, columns=x; scale/origin in manifest.json")
         if self.exports & {"height_png", "video"}:
-            pic = field_image(h, self.recon.config.color_limit_mm, axes=(x_axis, y_axis), annotate=True,
+            pic = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap, axes=(x_axis, y_axis), annotate=True,
                               title=f"Elevation (mm) | Frame {frame_id} | t={time_s if time_s is not None else 'unknown'} s")
             data = png_bytes(pic)
             if "height_png" in self.exports:
@@ -228,7 +228,8 @@ class Session:
         if "spectrum" in self.exports:
             self.point_signals.append([float(s["height_mm"][0]) for s in samples if s["kind"] == "point"])
         self.frames.append(meta)
-        preview = field_image(h, self.recon.config.color_limit_mm)
+        self.last_height = h.copy()
+        preview = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap)
         preview.thumbnail((1100, 850))
         return {"summary": meta, "preview": base64.b64encode(png_bytes(preview)).decode(), "count": seq}
 
@@ -260,7 +261,7 @@ class Session:
                             frame_id=[f["frame_id"] for f in self.frames], convention="exp(-i omega t); axis order time,y,x")
             mean_amp = np.abs(analytic).mean(axis=0)
             self.zip.writestr("temporal/mean_amplitude.png", png_bytes(field_image(mean_amp,
-                self.recon.config.color_limit_mm, positive=True, annotate=True, title="Mean analytic amplitude (mm)", scale=self.recon.scale)))
+                self.recon.config.color_limit_mm, colormap=self.recon.config.colormap, positive=True, annotate=True, title="Mean analytic amplitude (mm)", scale=self.recon.scale)))
         if "spectrum" in self.exports and uniform:
             if self.geometry.get("points"):
                 signals = np.array(self.point_signals)
@@ -348,6 +349,13 @@ def dispatch(message):
     if key not in sessions:
         raise ValueError("任务不存在或已被清理")
     s = sessions[key]
+    if op == 'preview':
+        if not hasattr(s, 'last_height'):
+            raise ValueError('尚无恢复结果')
+        im = field_image(s.last_height, float(message.get('limit', s.recon.config.color_limit_mm)),
+                         colormap=message.get('colormap', s.recon.config.colormap))
+        im.thumbnail((1100, 850))
+        return {'preview': base64.b64encode(png_bytes(im)).decode()}
     if op == "frame":
         return s.process(decode_image(base64.b64decode(message["data"], validate=True)),
                          message["name"], message["frame_id"], message.get("time_s"))

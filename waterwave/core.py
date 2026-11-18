@@ -10,6 +10,7 @@ import math
 import numpy as np
 from scipy import fft, ndimage, signal
 from .measurement import valid_mask, fill_pattern, Bridge
+from .colors import TABLES
 
 
 @dataclass
@@ -28,6 +29,7 @@ class Config:
     filter_ratio: float = 1.0
     integration: str = "difference"
     color_limit_mm: float = 1.0
+    colormap: str = 'jet'
     fps: float = 100.0
     temporal_limit_mb: float = 256.0
     pipeline: str = "final3"
@@ -56,6 +58,8 @@ class Config:
     amplitude_unit: str = 'V'
 
     def validate(self):
+        if self.colormap not in TABLES:
+            raise ValueError('未知色图')
         for key, value in asdict(self).items():
             if isinstance(value, (int, float)) and not math.isfinite(value):
                 raise ValueError(f"{key} 必须为有限数值")

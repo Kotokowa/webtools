@@ -6,7 +6,7 @@ const root = path.join(__dirname, '..');
 
 test('static build ships the exact desktop Python core and separate tool assets', () => {
   require('../scripts/build.cjs');
-  for (const name of ['__init__.py', 'core.py', 'session.py']) {
+  for (const name of ['__init__.py', 'core.py', 'session.py', 'colors.py', 'colormaps.json']) {
     assert.deepEqual(fs.readFileSync(path.join(root,'waterwave',name)), fs.readFileSync(path.join(root,'dist/water-wave/python',name)));
   }
   for (const name of ['index.html','app.js','ui-utils.js','video-worker.js','style.css','worker.js','guide.html','LICENSE-FCD.txt']) {
@@ -15,6 +15,15 @@ test('static build ships the exact desktop Python core and separate tool assets'
   const offline = fs.readFileSync(path.join(root,'dist/nfc-offline.html'),'utf8');
   assert.ok(!offline.includes('pyodide'));
   assert.ok(!offline.includes('water-wave'));
+});
+
+test('browser legend and Python rendering share identical palette tables', () => {
+  const vm=require('node:vm'),context={};vm.runInNewContext(fs.readFileSync(path.join(root,'src/water-wave/colormaps.js'),'utf8'),context);
+  const tables=JSON.parse(fs.readFileSync(path.join(root,'waterwave/colormaps.json'),'utf8'));
+  assert.deepEqual(JSON.parse(JSON.stringify(context.WaterWaveColors)),tables);
+  assert.equal(Object.keys(tables)[0],'jet');
+  assert.deepEqual(tables.jet[0],[0,0,131]);assert.deepEqual(tables.jet[255],[128,0,0]);
+  for(const table of Object.values(tables)){assert.equal(table.length,256);assert(table.every(c=>c.length===3&&c.every(x=>Number.isInteger(x)&&x>=0&&x<=255)));}
 });
 
 const {sampleGeometry,resultFilename,progressTitle} = require('../src/water-wave/ui-utils.js');

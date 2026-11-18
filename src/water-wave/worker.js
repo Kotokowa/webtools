@@ -7,7 +7,7 @@ async function boot() {
   runtime = await loadPyodide({indexURL: WATERWAVE_RUNTIME.pyodide});
   await runtime.loadPackage(['numpy', 'scipy', 'pillow']);
   runtime.FS.mkdirTree('/home/pyodide/waterwave');
-  for (const name of ['__init__.py', 'core.py', 'session.py', 'measurement.py', 'analysis.py', 'fields.py']) {
+  for (const name of ['__init__.py', 'core.py', 'session.py', 'measurement.py', 'analysis.py', 'fields.py', 'colors.py', 'colormaps.json']) {
     const response = await fetch('python/' + name);
     if (!response.ok) throw Error('Python 算法文件缺失：' + name);
     runtime.FS.writeFile('/home/pyodide/waterwave/' + name, await response.text());
