@@ -26,6 +26,15 @@ test('browser legend and Python rendering share identical palette tables', () =>
   for(const table of Object.values(tables)){assert.equal(table.length,256);assert(table.every(c=>c.length===3&&c.every(x=>Number.isInteger(x)&&x>=0&&x<=255)));}
 });
 
+test('local directory controls use the user-facing names and expose unlink buttons', () => {
+  const advanced=fs.readFileSync(path.join(root,'src','water-wave','advanced.js'),'utf8');
+  assert.match(advanced,/id="batch-directory">选择本地实验数据目录/);
+  assert.match(advanced,/id="reference-directory">选择本地参考场文件目录/);
+  assert.match(advanced,/id="batch-root-clear"[^>]*>×/);
+  assert.match(advanced,/id="reference-root-clear"[^>]*>×/);
+  assert.match(advanced,/clearExperimentDirectory/);assert.match(advanced,/clearReferenceDirectory/);
+});
+
 const {sampleGeometry,resultFilename,progressTitle} = require('../src/water-wave/ui-utils.js');
 test('numeric and drawn samples share cropped bounds and preserve fractional coordinates', () => {
   const bounds=[110,210,389,489];

@@ -11,13 +11,13 @@
     const label=document.createElement('label');label.className='export-item';label.innerHTML=`<input type="checkbox" data-export="${id}" ${['rms_npz','focal_line','focal_area'].includes(id)?'checked':''}><span>${title}</span>`;document.querySelector('.export-grid').append(label);
   }
   const batchPanel=document.createElement('section');batchPanel.className='panel';
-  batchPanel.innerHTML=`<h2>本地批处理</h2><button id="batch-directory">严格命名-本地文件批处理</button><p id="batch-root-name"></p>
+  batchPanel.innerHTML=`<h2>本地批处理</h2><button id="batch-directory">选择本地实验数据目录</button><div class="directory-row" id="batch-root-row"><span id="batch-root-name"></span><button type="button" class="directory-clear" id="batch-root-clear" aria-label="解除实验数据目录" title="解除关联" hidden>×</button></div>
     <label>变量<select id="batch-variable"><option value="depth">水深</option><option value="freq">频率</option><option value="amp">振幅</option></select></label>
     ${input('batch-amp','振幅',0)}${input('batch-unit','振幅单位','V','text')}
     ${input('batch-format','实验格式','{run}_{depth}mm.avi','text')}${input('static-format','静水格式','{run}_jt.tiff','text')}
     ${input('batch-extensions','文件扩展名','avi,mp4,mov,mkv,webm,tif,tiff,png,jpg,jpeg,bmp,mat,npz','text')}
     ${input('batch-repeats','重复次数',0)}<div class="three">${input('batch-start','起始序号',1)}${input('batch-end','结束序号',0)}${input('batch-stride','间隔',1)}</div>
-    <button id="reference-directory">无波带片目录</button><p id="reference-root-name"></p>
+    <button id="reference-directory">选择本地参考场文件目录</button><div class="directory-row" id="reference-root-row"><span id="reference-root-name"></span><button type="button" class="directory-clear" id="reference-root-clear" aria-label="解除参考场文件目录" title="解除关联" hidden>×</button></div>
     ${input('reference-format','无片实验格式','{run}_{depth}mm.avi','text')}${input('reference-static-format','无片静水格式','{run}_jt.tiff','text')}${input('reference-rms-format','无片 RMS 格式','{run}_{depth}mm_RMS.{ext}','text')}
     <div class="mini-actions"><button id="batch-scan">识别</button><button id="batch-run">处理</button></div><div id="batch-list"></div><p id="repeat-notice" role="status" hidden></p>`;
   document.querySelector('aside').append(batchPanel);
@@ -57,8 +57,13 @@
   $('raw-reference-files').onchange=e=>{rawFiles=[...e.target.files];};
   $('raw-reference-folder').onchange=e=>{rawFiles=[...e.target.files];const refs=rawFiles.filter(f=>refPattern.test(f.name));if(refs.length===1)rawStatic=refs[0];};
   async function directory(){if(!window.showDirectoryPicker)throw Error('当前浏览器不支持本地目录读写');return window.showDirectoryPicker({mode:'readwrite'});}
-  $('batch-directory').onclick=catchAction(async()=>{root=await directory();$('batch-root-name').textContent=root.name;});
-  $('reference-directory').onclick=catchAction(async()=>{referenceRoot=await directory();$('reference-root-name').textContent=referenceRoot.name;});
+  function showDirectory(nameId,name){$(nameId).textContent=name;$(nameId.replace('-name','-clear')).hidden=!name;}
+  function clearExperimentDirectory(){root=null;tasks=[];$('batch-list').replaceChildren();showDirectory('batch-root-name','');status('已解除实验数据目录关联。');}
+  function clearReferenceDirectory(){referenceRoot=null;referenceTasks=[];$('reference-root-name').textContent='';$('reference-root-clear').hidden=true;status('已解除参考场文件目录关联。');}
+  $('batch-directory').onclick=catchAction(async()=>{root=await directory();showDirectory('batch-root-name',root.name);});
+  $('reference-directory').onclick=catchAction(async()=>{referenceRoot=await directory();showDirectory('reference-root-name',referenceRoot.name);});
+  $('batch-root-clear').onclick=clearExperimentDirectory;
+  $('reference-root-clear').onclick=clearReferenceDirectory;
   async function scan(dir,prefix=''){const found=[];for await(const [name,handle] of dir.entries()){if(name==='results'||name.startsWith('.'))continue;const path=prefix+name;if(handle.kind==='directory')found.push(...await scan(handle,path+'/'));else found.push({path,handle});}return found;}
   function batchOptions(){return {extensions:$('batch-extensions').value,defaults:{depth:Number($('water_depth_mm').value),freq:Number($('frequency_hz').value),amp:Number($('batch-amp').value)},amplitudeUnit:$('batch-unit').value};}
   function listTasks(){const list=$('batch-list');list.replaceChildren();for(const t of tasks){const row=document.createElement('div');row.textContent=t.entries[0].path+' · '+(t.errors.join('；')||'就绪');list.append(row);}}

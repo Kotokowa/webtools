@@ -14,6 +14,10 @@ const {chromium}=require('playwright');const {aviFixture}=require('./avi-fixture
   assert.equal(await page.locator('#colormap').inputValue(),'jet');
   assert.equal(await page.locator('.module[open]').count(),0);
   assert.equal(await page.locator('[data-task]').count(),5);
+  await page.locator('[data-task=batch]').click();
+  assert.equal(await page.locator('#batch-directory').textContent(),'选择本地实验数据目录');
+  assert.equal(await page.locator('#reference-directory').textContent(),'选择本地参考场文件目录');
+  assert(await page.locator('#batch-root-clear').isHidden());assert(await page.locator('#reference-root-clear').isHidden());
   const guide=await context.newPage();await guide.goto(url+'/guide.html');
   assert.equal(await guide.locator('#toc nav a').count(),15);
   await guide.locator('img').evaluateAll(images=>images.forEach(img=>img.loading='eager'));

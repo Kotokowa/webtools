@@ -24,7 +24,7 @@
   module(recovery,'恢复与 RMS','recovery-options');
   const batchFrame=group('帧范围',[$('batch-start').parentElement.parentElement]);
   $('batch-repeats').closest('label').after(batchFrame);
-  const batchReference=group('无波带片参考',[$('reference-directory'),$('reference-root-name'),...['reference-format','reference-static-format','reference-rms-format'].map(id=>$(id).closest('label'))],'batch-reference-options');
+  const batchReference=group('无波带片参考',[$('reference-directory'),$('reference-root-row'),...['reference-format','reference-static-format','reference-rms-format'].map(id=>$(id).closest('label'))],'batch-reference-options');
   batch.querySelector('.mini-actions').before(batchReference);
   const batchFold=module(batch,'本地批处理','batch-options');
   const frameRange=group('帧范围',[$('start').parentElement.parentElement,$('frame-list').closest('label')],'frame-options');
