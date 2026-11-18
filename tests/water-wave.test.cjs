@@ -32,7 +32,20 @@ test('local directory controls use the user-facing names and expose unlink butto
   assert.match(advanced,/id="reference-directory">选择本地参考场文件目录/);
   assert.match(advanced,/id="batch-root-clear"[^>]*>×/);
   assert.match(advanced,/id="reference-root-clear"[^>]*>×/);
+  assert.match(advanced,/id="batch-continue"[^>]*hidden/);
   assert.match(advanced,/clearExperimentDirectory/);assert.match(advanced,/clearReferenceDirectory/);
+});
+
+test('batch processing keeps frame previews and reports the output directory', () => {
+  const advanced=fs.readFileSync(path.join(root,'src','water-wave','advanced.js'),'utf8');
+  assert.match(advanced,/function showBatchPreview/);
+  assert.match(advanced,/done%50===0/);
+  assert.match(advanced,/已更新预览/);
+  assert.match(advanced,/结果目录|继续/);
+  assert.match(advanced,/options\.direct_files=Boolean\(dir\)/);
+  const video=fs.readFileSync(path.join(root,'src','water-wave','video-worker.js'),'utf8');
+  assert.match(video,/const PREFETCH = 4/);
+  assert.match(video,/'-frames:v',String\(count\)/);
 });
 
 const {sampleGeometry,resultFilename,progressTitle} = require('../src/water-wave/ui-utils.js');

@@ -1,9 +1,11 @@
 /* Single-thread FFmpeg: no COOP/COEP headers or shared memory required.
  * Loaded only by the separate water-wave page when an AVI is imported.
  * Source files stay in this worker; WORKERFS reads the File without copying
- * the whole movie into the WASM heap. One lossless BMP frame is held at a time.
+ * the whole movie into the WASM heap. A short lossless BMP block is held at a time.
  */
 let core, input, metadata;
+const PREFETCH = 4;
+const frameCache = new Map();
 importScripts('runtime-config.js');
 const base = WATERWAVE_RUNTIME.ffmpeg;
 let errors = [];
@@ -30,6 +32,8 @@ self.onmessage = async ({data: {id, op, file, index}}) => {
       core = await createFFmpegCore({wasmBinary});
       core.setLogger(({message}) => { errors.push(message); if (errors.length>12) errors.shift(); });
       core.FS.mkdir('/input');
+      try { core.FS.mkdir('/cache'); } catch {}
+      frameCache.clear();
       core.FS.mount(core.FS.filesystems.WORKERFS, {files: [file]}, '/input');
       input = '/input/' + file.name;
       execute('ffprobe', '-v','error','-select_streams','v:0','-show_entries',
@@ -47,14 +51,31 @@ self.onmessage = async ({data: {id, op, file, index}}) => {
     } else if (op === 'frame') {
       if (!metadata || !Number.isInteger(index) || index<0 || index>=metadata.count) throw Error('AVI 帧索引无效');
       try {
-        // Accurate input seeking decodes from the preceding keyframe and discards
-        // earlier timestamps. No lossy transcode or browser seek is involved.
-        execute('exec','-v','error','-ss',(index/metadata.fps).toFixed(12),'-i',input,
-          '-map','0:v:0','-frames:v','1','-an','-sn','-pix_fmt','bgr24','-c:v','bmp','-f','image2','frame.bmp');
-        const bytes = core.FS.readFile('frame.bmp');
-        if (!bytes.length) throw Error('未读取到指定 AVI 帧');
-        self.postMessage({id,result:{bytes:bytes.buffer}},[bytes.buffer]);
-      } finally { try {core.FS.unlink('frame.bmp');} catch {} }
+        let bytes = frameCache.get(index);
+        if (!bytes) {
+          const count = Math.min(PREFETCH, metadata.count-index);
+          frameCache.clear();
+          for (let n=1;n<=PREFETCH;n++) { try { core.FS.unlink(`/cache/frame-${String(n).padStart(6,'0')}.bmp`); } catch {} }
+          // Decode a short sequential block. The caller usually requests frames in
+          // order, so one FFmpeg invocation serves several frames and avoids paying
+          // the WASM/FFmpeg startup cost once per frame.
+          execute('exec','-v','error','-ss',(index/metadata.fps).toFixed(12),'-i',input,
+            '-map','0:v:0','-frames:v',String(count),'-an','-sn','-pix_fmt','bgr24',
+            '-c:v','bmp','-f','image2','/cache/frame-%06d.bmp');
+          for (let n=0;n<count;n++) {
+            const path=`/cache/frame-${String(n+1).padStart(6,'0')}.bmp`;
+            const part=core.FS.readFile(path); if (!part.length) continue;
+            frameCache.set(index+n, new Uint8Array(part));
+            try { core.FS.unlink(path); } catch {}
+          }
+          bytes = frameCache.get(index);
+          if (!bytes) throw Error('未读取到指定 AVI 帧');
+        }
+        // Transfer a copy so the prefetched cache remains available for the next call.
+        const out=bytes.slice();
+        frameCache.delete(index);
+        self.postMessage({id,result:{bytes:out.buffer}},[out.buffer]);
+      } finally {}
     } else throw Error('未知视频操作');
   } catch (error) { self.postMessage({id,error:String(error.message || error)}); }
 };

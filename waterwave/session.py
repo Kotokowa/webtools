@@ -116,6 +116,8 @@ class Session:
         self.directory.mkdir()
         self.path = self.directory / "water-wave-results.zip"
         self.zip = zipfile.ZipFile(self.path, "w", zipfile.ZIP_DEFLATED, compresslevel=3)
+        self.direct_files_mode = bool(settings.get("direct_files", False))
+        self.direct_files = []
         self.frames, self.heights, self.point_signals, self.video_paths = [], [], [], []
         self.tables = {}
         self.closed = False
@@ -134,6 +136,12 @@ class Session:
         self.tables[name][1].writerows(rows)
 
     def array_file(self, name, **arrays):
+        if self.direct_files_mode:
+            path = self.directory / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(path, **arrays)
+            self.direct_files.append(path)
+            return
         with self.zip.open(name, "w", force_zip64=True) as f:
             # np.savez uses an uncompressed inner ZIP; outer archive compresses it.
             np.savez(f, **arrays)
@@ -196,15 +204,27 @@ class Session:
         if "raw_npz" in self.exports:
             self.array_file(f"before_detrend/{tag}.npz", height_mm=result["raw_height_mm"])
         if "height_csv" in self.exports:
-            with self.zip.open(f"height_csv/{tag}.csv", "w") as binary:
-                with io.TextIOWrapper(binary, encoding="utf-8", newline="") as f:
-                    np.savetxt(f, h, delimiter=",", fmt="%.7g", header="height_mm; rows=y, columns=x; scale/origin in manifest.json")
+            if self.direct_files_mode:
+                path = self.directory/f"height_csv/{tag}.csv"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                np.savetxt(path, h, delimiter=",", fmt="%.7g", header="height_mm; rows=y, columns=x; scale/origin in manifest.json")
+                self.direct_files.append(path)
+            else:
+                with self.zip.open(f"height_csv/{tag}.csv", "w") as binary:
+                    with io.TextIOWrapper(binary, encoding="utf-8", newline="") as f:
+                        np.savetxt(f, h, delimiter=",", fmt="%.7g", header="height_mm; rows=y, columns=x; scale/origin in manifest.json")
         if self.exports & {"height_png", "video"}:
             pic = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap, axes=(x_axis, y_axis), annotate=True,
                               title=f"Elevation (mm) | Frame {frame_id} | t={time_s if time_s is not None else 'unknown'} s")
             data = png_bytes(pic)
             if "height_png" in self.exports:
-                self.zip.writestr(f"images/{tag}.png", data)
+                if self.direct_files_mode:
+                    path = self.directory/f"images/{tag}.png"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(data)
+                    self.direct_files.append(path)
+                else:
+                    self.zip.writestr(f"images/{tag}.png", data)
             if "video" in self.exports:
                 p = self.directory/f"{tag}.png"
                 p.write_bytes(data)
@@ -260,8 +280,15 @@ class Session:
                             phase_rad=np.mod(np.angle(analytic), 2*np.pi).astype(np.float32), time_s=times,
                             frame_id=[f["frame_id"] for f in self.frames], convention="exp(-i omega t); axis order time,y,x")
             mean_amp = np.abs(analytic).mean(axis=0)
-            self.zip.writestr("temporal/mean_amplitude.png", png_bytes(field_image(mean_amp,
-                self.recon.config.color_limit_mm, colormap=self.recon.config.colormap, positive=True, annotate=True, title="Mean analytic amplitude (mm)", scale=self.recon.scale)))
+            data = png_bytes(field_image(mean_amp,
+                self.recon.config.color_limit_mm, colormap=self.recon.config.colormap, positive=True, annotate=True, title="Mean analytic amplitude (mm)", scale=self.recon.scale))
+            if self.direct_files_mode:
+                path = self.directory/"temporal/mean_amplitude.png"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+                self.direct_files.append(path)
+            else:
+                self.zip.writestr("temporal/mean_amplitude.png", data)
         if "spectrum" in self.exports and uniform:
             if self.geometry.get("points"):
                 signals = np.array(self.point_signals)
@@ -291,14 +318,21 @@ class Session:
                         writer.write(cv2.cvtColor(a, cv2.COLOR_RGB2BGR))
                 finally:
                     writer.release()
-                self.zip.write(path, "height.mp4")
+                if self.direct_files_mode:
+                    self.direct_files.append(path)
+                else:
+                    self.zip.write(path, "height.mp4")
             else:
                 temporal_note = (temporal_note or "") + " 非均匀或不足两帧：未生成 MP4"
         self.table("summary.csv", ["frame_id", "time_s", "source_name", "min_mm", "max_mm", "rms_mm", "low_carrier_fraction"],
                    [[f[k] for k in ["frame_id", "time_s", "source_name", "min_mm", "max_mm", "rms_mm", "low_carrier_fraction"]] for f in self.frames])
         for name, (f, _) in self.tables.items():
             f.close()
-            self.zip.write(self.directory/name, name)
+            path = self.directory/name
+            if self.direct_files_mode:
+                self.direct_files.append(path)
+            else:
+                self.zip.write(path, name)
         rms = self.rms.finish()
         x, y = self.recon.coordinates()
         rms.update(X_cm=x/10, Y_cm=y/10, source=self.frames[0]['source_name'],
@@ -363,7 +397,11 @@ def dispatch(message):
         path = s.finish(bool(message.get("partial", False)))
         with zipfile.ZipFile(path) as z:
             note = json.loads(z.read("manifest.json"))["temporal_note"]
-        return {"filename": path.name, **artifact(path), "field": describe(s.field_key), "note": note}
+        files=[]
+        for item in s.direct_files:
+            if item.exists():
+                files.append({"name": str(item.relative_to(s.directory)).replace('\\','/'), **artifact(item)})
+        return {"filename": path.name, **artifact(path), "field": describe(s.field_key), "note": note, "files": files}
     if op == "dispose":
         s.dispose()
         del sessions[key]
