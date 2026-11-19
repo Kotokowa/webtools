@@ -4,6 +4,13 @@ from scipy import ndimage, sparse
 from scipy.sparse.linalg import factorized
 
 
+def dilate_disk(mask, radius):
+    """Exact Euclidean disk dilation without scanning a disk at every pixel."""
+    if radius <= 0 or not mask.any():
+        return mask.copy()
+    return ndimage.distance_transform_edt(~mask) <= radius
+
+
 def valid_mask(image, cfg, thresholds=None):
     w = int(cfg.mask_window) | 1
     mean = ndimage.uniform_filter(image, w, mode="reflect")
@@ -18,8 +25,7 @@ def valid_mask(image, cfg, thresholds=None):
     bad &= sizes[labels] >= cfg.mask_min_blob
     radius = int(cfg.mask_grow + cfg.mask_guard)
     if radius:
-        y, x = np.ogrid[-radius:radius+1, -radius:radius+1]
-        bad = ndimage.binary_dilation(bad, x*x+y*y <= radius*radius)
+        bad = dilate_disk(bad, radius)
     border = np.zeros(image.shape, bool)
     b = int(cfg.mask_guard)+2
     border[:b] = border[-b:] = True
@@ -30,24 +36,26 @@ def valid_mask(image, cfg, thresholds=None):
 def fill_pattern(image, reference, holes, carriers, ring=20):
     if not holes.any():
         return image.copy(), False
-    ry, rx = np.ogrid[-ring:ring+1, -ring:ring+1]
-    surrounding = ndimage.binary_dilation(holes, structure=rx*rx+ry*ry <= ring*ring) & ~holes
-    y, x = np.indices(image.shape)
-    basis = [np.ones(image.shape)]
-    for k in carriers:
-        phase = k[0]*x+k[1]*y
-        basis.extend([np.cos(phase), np.sin(phase)])
+    surrounding = dilate_disk(holes, ring) & ~holes
     ids = np.flatnonzero(surrounding)[::max(1, int(surrounding.sum())//60000)]
     out = image.copy()
     if len(ids) < 50:
         out[holes] = reference[holes]
         return out, True
-    design = np.stack([a.ravel()[ids] for a in basis], axis=1)
+    def basis_at(ids):
+        y, x = np.divmod(ids, image.shape[1])
+        basis = [np.ones(len(ids))]
+        for k in carriers:
+            phase = k[0]*x+k[1]*y
+            basis.extend([np.cos(phase), np.sin(phase)])
+        return basis
+    design = np.stack(basis_at(ids), axis=1)
     coeff, _, rank, _ = np.linalg.lstsq(design, reference.ravel()[ids], rcond=None)
-    if rank < len(basis):
+    if rank < design.shape[1]:
         out[holes] = reference[holes]
         return out, True
-    out[holes] = sum(c*a[holes] for c, a in zip(coeff, basis))
+    missing = np.flatnonzero(holes)
+    out.ravel()[missing] = sum(c*a for c, a in zip(coeff, basis_at(missing)))
     return out, False
 
 

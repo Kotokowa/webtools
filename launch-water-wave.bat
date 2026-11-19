@@ -4,11 +4,12 @@ if not exist ".venv-waterwave\Scripts\python.exe" (
   py -3 -m venv .venv-waterwave
   if errorlevel 1 goto failed
 )
-".venv-waterwave\Scripts\python.exe" -c "import numpy, scipy, PIL, cv2" >nul 2>&1
+".venv-waterwave\Scripts\python.exe" -c "import numpy, scipy, PIL, cv2, pyfftw, zlib_ng" >nul 2>&1
 if errorlevel 1 (
   ".venv-waterwave\Scripts\python.exe" -m pip install -r requirements-waterwave.txt
   if errorlevel 1 goto failed
 )
+".venv-waterwave\Scripts\python.exe" scripts\setup-native-gpu.py
 ".venv-waterwave\Scripts\python.exe" -m waterwave
 if errorlevel 1 goto failed
 exit /b 0

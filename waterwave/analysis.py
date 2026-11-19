@@ -96,8 +96,10 @@ def average_fields(fields):
     variance = first['dZ']**2
     valid = first['valid'].copy(); n = 1
     sources = [str(first.get('source', ''))]
+    grids = []
     for field in fields:
-        compatible(first, field)
+        field, interpolated = reference_on_grid(field, first)
+        if interpolated: grids.append(str(field.get('source', '')))
         n += 1
         z = np.nan_to_num(field['Z'])
         delta = z-mean; mean += delta/n; m2 += delta*(z-mean)
@@ -109,7 +111,35 @@ def average_fields(fields):
     for value in (mean, ua, measurement, dz): value[~valid] = np.nan
     return dict(Z=mean, dZ=dz, valid=valid, X_cm=first['X_cm'], Y_cm=first['Y_cm'],
                 uA=ua, dZ_measurement=measurement, repeats=n, config_json=first.get('config_json', '{}'),
-                sources_json=json.dumps(sources), source='average')
+                sources_json=json.dumps(sources), grid_interpolated_sources_json=json.dumps(grids),
+                uncertainty_interpolation='linear standard uncertainty; conservative correlated bound', source='average')
+
+
+def reference_on_grid(reference, field):
+    """Interpolate only sub-pixel calibration drift, in physical coordinates."""
+    try:
+        compatible(field, reference)
+        return reference, False
+    except ValueError:
+        # Keep the existing condition/calibration checks, independently of axes.
+        compatible(field, {**reference, 'X_cm': field['X_cm'], 'Y_cm': field['Y_cm']})
+    for key in ('X_cm', 'Y_cm'):
+        a, b = field[key], reference[key]
+        pixel = min(float(np.median(np.diff(a))), float(np.median(np.diff(b))))
+        if a.shape != b.shape or np.max(np.abs(a-b)) > pixel:
+            raise ValueError('参考 RMS 网格偏差超过一个像素，请检查机位、ROI 与标定')
+    x, y = np.meshgrid(field['X_cm'], field['Y_cm'])
+    points = np.column_stack([y.ravel(), x.ravel()])
+    result = {**reference, 'X_cm': field['X_cm'], 'Y_cm': field['Y_cm']}
+    for key in ('Z', 'dZ'):
+        values = np.where(reference['valid'], reference[key], np.nan)
+        fun = RegularGridInterpolator((reference['Y_cm'], reference['X_cm']), values,
+                                      bounds_error=False, fill_value=np.nan)
+        result[key] = fun(points).reshape(field['Z'].shape)
+    result['valid'] = np.isfinite(result['Z'])
+    if result['valid'].sum() < .98*reference['valid'].sum():
+        raise ValueError('参考 RMS 网格共同有效区域不足')
+    return result, True
 
 
 def model(p, x, y, kind):
@@ -173,7 +203,9 @@ def analyze(field, center, options=None, reference=None):
         raise ValueError('焦点与积分范围无效')
     if not field['X_cm'][0] <= xc <= field['X_cm'][-1] or not field['Y_cm'][0] <= yc <= field['Y_cm'][-1]:
         raise ValueError('焦点超出 RMS 场')
-    if reference is not None: compatible(field, reference)
+    reference_interpolated = False
+    if reference is not None:
+        reference, reference_interpolated = reference_on_grid(reference, field)
     x, y = np.meshgrid(field['X_cm'], field['Y_cm'])
     z, dz = field['Z'], field['dZ']
     region = (abs(x-xc) <= half) & (abs(y-yc) <= half) & field['valid']
@@ -238,6 +270,7 @@ def analyze(field, center, options=None, reference=None):
     p, kind = fit['p'], fit['kind']
     fitted = model(p, x, y, kind)
     metrics = dict(model=kind, center_cm=p[2:4], user_center_cm=[xc, yc], theta_rad=p[6],
+                   reference_grid_interpolated=reference_interpolated,
                    baseline_mm=p[0], measured_peak_mm=float(z[region].max()), smoothed_peak_mm=float(smoothed[region].max()),
                    model_peak_mm=float(model(p, p[2], p[3], kind)), rmse_mm=fit['rmse'],
                    r_squared=1-fit['sse']/max(float(np.sum((zz-zz.mean())**2)), 1e-30),

@@ -20,6 +20,7 @@ function rate(s) { const [a,b=1] = String(s).split('/').map(Number); return a/b;
 self.onmessage = async ({data: {id, op, file, index}}) => {
   try {
     if (op === 'open') {
+      if (!core) {
       self.postMessage({id,progressText:'正在加载 AVI 解码脚本…'});
       importScripts(base + 'ffmpeg-core.js');
       self.postMessage({id,progressText:'正在下载 AVI 解码器…'});
@@ -33,6 +34,7 @@ self.onmessage = async ({data: {id, op, file, index}}) => {
       core.setLogger(({message}) => { errors.push(message); if (errors.length>12) errors.shift(); });
       core.FS.mkdir('/input');
       try { core.FS.mkdir('/cache'); } catch {}
+      }
       frameCache.clear();
       core.FS.mount(core.FS.filesystems.WORKERFS, {files: [file]}, '/input');
       input = '/input/' + file.name;
@@ -48,6 +50,11 @@ self.onmessage = async ({data: {id, op, file, index}}) => {
       if (!Number.isSafeInteger(count) || count<1) throw Error('AVI 缺少可靠帧数，请使用本地版解码');
       metadata = {fps,count,width:stream.width,height:stream.height,codec:stream.codec_name};
       self.postMessage({id,result:metadata});
+    } else if (op === 'close') {
+      frameCache.clear();
+      try { core.FS.unmount('/input'); } catch {}
+      metadata = null; input = null;
+      self.postMessage({id,result:{ok:true}});
     } else if (op === 'frame') {
       if (!metadata || !Number.isInteger(index) || index<0 || index>=metadata.count) throw Error('AVI 帧索引无效');
       try {

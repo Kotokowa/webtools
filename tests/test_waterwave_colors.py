@@ -54,6 +54,11 @@ class ColorTests(unittest.TestCase):
             with zipfile.ZipFile(artifacts[result['artifact']]) as z:
                 self.assertNotIn('fit.npz',z.namelist())
                 self.assertNotIn('area_gain',json.loads(z.read('focal.json'))['fit_gain'])
+                self.assertIn('integration_geometry.png', z.namelist())
+                self.assertIn('profiles/fit_x.png', z.namelist())
+                geometry=json.loads(z.read('integration_geometry.json'))['paths']['fit']
+                center=result['metrics']['center_cm']
+                np.testing.assert_allclose(geometry['line_cm'], [[center[0]-1.5,center[1]], [center[0]+1.5,center[1]]])
             dispatch_field(dict(op='artifact_dispose',artifact=result['artifact']))
         finally:
             for field in (key,reference):dispatch_field(dict(op='field_dispose',field=field))

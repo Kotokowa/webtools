@@ -55,7 +55,7 @@ class Config:
     lockin: bool = False
     frequency_hz: float = 6.0
     excitation_amplitude: float = 0.0
-    amplitude_unit: str = 'V'
+    amplitude_unit: str = 'mm'
 
     def validate(self):
         if self.colormap not in TABLES:
@@ -144,9 +144,9 @@ def find_carriers(reference):
     return kr, ku
 
 
-def inverse_gradient(fx, fy, *, difference=True, boundary=True):
+def inverse_gradient(fx, fy, *, difference=True, boundary=True, xp=np, transform=fft):
     """MATLAB fftinvgrad2 impulse boundary correction and least-squares inverse."""
-    fx, fy = np.array(fx, dtype=float, copy=True), np.array(fy, dtype=float, copy=True)
+    fx, fy = xp.array(fx, dtype=float, copy=True), xp.array(fy, dtype=float, copy=True)
     if fx.shape != fy.shape or min(fx.shape) < 4:
         raise ValueError("梯度尺寸不匹配或过小")
     ny, nx = fx.shape
@@ -155,18 +155,18 @@ def inverse_gradient(fx, fy, *, difference=True, boundary=True):
         fx[:, [0, -1]] = -0.5 * fx[:, 1:-1].sum(axis=1, keepdims=True)
         fy[[0, -1], :] = -0.5 * fy[1:-1, :].sum(axis=0, keepdims=True)
     mx, my = fx.mean(), fy.mean()
-    kx, ky = np.meshgrid(kvec(nx), kvec(ny))
+    kx, ky = (2*xp.pi*transform.rfftfreq(nx))[None, :], (2*xp.pi*transform.fftfreq(ny))[:, None]
     if difference:
-        kx, ky = np.sin(kx), np.sin(ky)
+        kx, ky = xp.sin(kx), xp.sin(ky)
     k2 = kx*kx + ky*ky
     if nx % 2 == 0:
-        kx[:, nx//2] = 0
+        kx[:, -1] = 0
     if ny % 2 == 0:
         ky[ny//2, :] = 0
-    k2[k2 < np.finfo(float).eps] = 1
-    h = fft.ifft2((-1j*kx*fft.fft2(fx) - 1j*ky*fft.fft2(fy)) / k2).real
-    y, x = np.indices(h.shape)
-    h += mx*x + my*y
+    k2[k2 < xp.finfo(float).eps] = 1
+    # Real gradients have conjugate Fourier symmetry; retain just one half.
+    h = transform.irfft2((-1j*kx*transform.rfft2(fx) - 1j*ky*transform.rfft2(fy)) / k2, s=(ny, nx))
+    h += mx*xp.arange(nx)[None, :] + my*xp.arange(ny)[:, None]
     if boundary:
         h[:, 0] = (4*h[:, 1] - h[:, 2] - 2*x_edge[:, 0])/3
         h[:, -1] = (4*h[:, -2] - h[:, -3] + 2*x_edge[:, 1])/3
@@ -175,39 +175,64 @@ def inverse_gradient(fx, fy, *, difference=True, boundary=True):
     return h
 
 
-def unwrap_phase(ph):
+def unwrap_phase(ph, *, xp=np, transform=fft):
     """Volkov & Zhu FFT unwrap, ported from FCD unwrap2 (not 1D unwrap)."""
     ny, nx = ph.shape
-    kx, ky = np.meshgrid(kvec(nx), kvec(ny))
-    z = np.exp(1j*ph)
-    fp, fz = fft.fft2(ph), fft.fft2(z)
-    jx = (fft.ifft2(1j*kx*fz)/(1j*z)).real - fft.ifft2(1j*kx*fp).real
-    jy = (fft.ifft2(1j*ky*fz)/(1j*z)).real - fft.ifft2(1j*ky*fp).real
-    j = inverse_gradient(jx, jy, difference=False, boundary=False)
+    kx, ky = (2*xp.pi*transform.fftfreq(nx))[None, :], (2*xp.pi*transform.fftfreq(ny))[:, None]
+    z = xp.exp(1j*ph)
+    fp, fz = transform.fft2(ph), transform.fft2(z)
+    jx = (transform.ifft2(1j*kx*fz)/(1j*z)).real - transform.ifft2(1j*kx*fp).real
+    jy = (transform.ifft2(1j*ky*fz)/(1j*z)).real - transform.ifft2(1j*ky*fp).real
+    j = inverse_gradient(jx, jy, difference=False, boundary=False, xp=xp, transform=transform)
     j -= j[max(0, ny//2-1), max(0, nx//2-1)]
-    jumps = np.rint(j/(2*np.pi)).astype(np.int64)
-    values, counts = np.unique(jumps, return_counts=True)
-    return ph + (jumps-values[counts.argmax()])*2*np.pi
+    jumps = xp.rint(j/(2*xp.pi)).astype(xp.int64)
+    values, counts = xp.unique(jumps, return_counts=True)
+    return ph + (jumps-values[counts.argmax()])*2*xp.pi
 
 
 def detrend_field(h, mode, valid=None):
     if mode == "none":
         return h.copy()
     # Normalized coordinates avoid the ill-conditioning of raw pixel powers.
-    y, x = np.meshgrid(np.linspace(-1, 1, h.shape[0]), np.linspace(-1, 1, h.shape[1]), indexing="ij")
-    basis = [np.ones_like(x), x, y]
-    if mode == "quadratic":
-        basis += [x*x, y*y, x*y]
-    elif mode != "plane":
+    y, x = np.linspace(-1, 1, h.shape[0]), np.linspace(-1, 1, h.shape[1])
+    if mode not in ('plane', 'quadratic'):
         raise ValueError("未知去趋势方式")
-    design = np.stack([b.ravel() for b in basis], axis=1)
     valid = np.isfinite(h) if valid is None else valid & np.isfinite(h)
     ids = np.flatnonzero(valid)
-    if len(ids) < len(basis):
+    if len(ids) < (6 if mode == 'quadratic' else 3):
         raise ValueError("有效像素不足以去趋势")
     ids = ids[::max(1, int(np.ceil(len(ids)/300000)))]
-    coeff = np.linalg.lstsq(design[ids], h.ravel()[ids], rcond=None)[0]
-    return h - (design @ coeff).reshape(h.shape)
+    iy, ix = np.divmod(ids, h.shape[1])
+    xx, yy = x[ix], y[iy]
+    basis = [np.ones(len(ids)), xx, yy]
+    if mode == 'quadratic':
+        basis += [xx*xx, yy*yy, xx*yy]
+    design = np.column_stack(basis)
+    coeff = np.linalg.lstsq(design, h.ravel()[ids], rcond=None)[0]
+    out = h.copy()
+    out -= coeff[0]
+    out -= coeff[1]*x[None, :]
+    out -= coeff[2]*y[:, None]
+    if mode == 'quadratic':
+        out -= coeff[3]*(x*x)[None, :]
+        out -= coeff[4]*(y*y)[:, None]
+        out -= coeff[5]*x[None, :]*y[:, None]
+    return out
+
+
+def demodulate(frame, carriers, kr, ku, unwrap=True, *, xp=np, transform=fft):
+    fd = transform.fft2(frame)
+    phases, qualities = [], []
+    for mask, refconj, refamp, med in carriers:
+        field = transform.ifft2(fd*mask)
+        ph = -xp.angle(field*refconj)
+        phases.append(unwrap_phase(ph, xp=xp, transform=transform) if unwrap else ph)
+        # Signal strength, NOT an uncertainty or accuracy estimate.
+        qualities.append(xp.minimum(refamp/med, xp.abs(field)/med))
+    det = kr[0]*ku[1]-kr[1]*ku[0]
+    u = (ku[1]*phases[0]-kr[1]*phases[1])/det
+    v = (kr[0]*phases[1]-ku[0]*phases[0])/det
+    return u, v, xp.minimum(*qualities)
 
 
 class Reconstructor:
@@ -249,7 +274,8 @@ class Reconstructor:
         for k in [self.kr, self.ku]:
             mask = (gx-k[0])**2 + (gy-k[1])**2 < self.radius**2
             ref = fft.ifft2(fref*mask)
-            self.carriers.append((mask, np.conj(ref), np.abs(ref)))
+            amp = np.abs(ref)
+            self.carriers.append((mask, np.conj(ref), amp, max(float(np.median(amp)), np.finfo(float).tiny)))
         self.scale = self.config.mm_per_pixel or float(np.linalg.norm(self.kr+self.ku)*self.config.square_mm/(2*np.pi))
         self.leff = (self.config.water_depth_mm + self.config.acrylic_mm*self.config.n_water/self.config.n_acrylic)*(1-self.config.n_air/self.config.n_water)
         self.H = self.config.height_scale*self.leff/self.scale
@@ -299,19 +325,8 @@ class Reconstructor:
             self.fill_fallbacks += int(fallback)
         if valid.sum() < 64:
             raise ValueError("动态图有效像素不足")
-        fd = fft.fft2(frame)
-        phases, qualities = [], []
-        for mask, refconj, refamp in self.carriers:
-            field = fft.ifft2(fd*mask)
-            ph = -np.angle(field*refconj)
-            phases.append(unwrap_phase(ph) if self.config.unwrap else ph)
-            # Signal strength, NOT an uncertainty or accuracy estimate.
-            med = max(float(np.median(refamp)), np.finfo(float).tiny)
-            qualities.append(np.minimum(refamp/med, np.abs(field)/med))
-        kr, ku = self.kr, self.ku
-        det = kr[0]*ku[1]-kr[1]*ku[0]
-        u = (ku[1]*phases[0]-kr[1]*phases[1])/det
-        v = (kr[0]*phases[1]-ku[0]*phases[0])/det
+        compute = getattr(self, 'demodulator', None)
+        u, v, quality = compute(frame) if compute else demodulate(frame, self.carriers, self.kr, self.ku, self.config.unwrap)
         e = self.config.edge_crop
         cut = (slice(e, -e), slice(e, -e)) if e else (slice(None), slice(None))
         if self.config.pipeline == "legacy":
@@ -329,7 +344,7 @@ class Reconstructor:
             raw, u, v, valid = raw[cut], u[cut], v[cut], valid[cut]
         height = detrend_field(raw, self.config.detrend, valid)
         raw[~valid] = np.nan; height[~valid] = np.nan
-        q = np.minimum(*qualities)[cut]
+        q = quality[cut]
         low = float(np.mean(q < .15))
         warnings = self.warnings.copy()
         if low > .05:

@@ -1,0 +1,2 @@
+cupy-cuda13x>=14,<15
+cuda-toolkit[cudart,cufft,nvrtc]==13.0.*

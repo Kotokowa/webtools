@@ -17,7 +17,15 @@ fields = {}
 artifacts = {}
 
 
-def profile_image(values, title):
+def save_npz(path, **arrays):
+    # Level 1 avoids spending CPU on nearly incompressible floating point noise.
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as out:
+        for name, value in arrays.items():
+            with out.open(name+'.npy', 'w', force_zip64=True) as stream:
+                np.lib.format.write_array(stream, np.asanyarray(value), allow_pickle=False)
+
+
+def profile_image(values, title, integration_length=None):
     from PIL import Image, ImageDraw
     image = Image.new('RGB', (800, 420), 'white'); draw = ImageDraw.Draw(image)
     t, observed, predicted = values[:, 0], values[:, 3], values[:, 5]
@@ -28,6 +36,11 @@ def profile_image(values, title):
     draw.line([(60, 40), (60, 360), (770, 360)], fill='black', width=1)
     draw.text((60, 380), f'{t[0]:.4g} .. {t[-1]:.4g} cm', fill='black')
     draw.text((4, 40), f'{hi:.3g}', fill='black'); draw.text((4, 345), f'{lo:.3g}', fill='black')
+    if integration_length is not None:
+        for position in (-integration_length/2, integration_length/2):
+            px=60+710*(position-t[0])/(t[-1]-t[0])
+            if 60 <= px <= 770: draw.line([(px,40),(px,360)],fill='#aaaaaa',width=1)
+        draw.text((360,380), f'Integration: {-integration_length/2:g} .. {integration_length/2:g} cm', fill='black')
     for data, color in ((observed, '#157c97'), (predicted, '#c76b29')):
         previous = None
         for xx, yy in zip(t, data):
@@ -39,6 +52,48 @@ def profile_image(values, title):
     return image
 
 
+def focal_geometry(field, metrics):
+    """Exact integration paths, in the physical coordinates used by analyze."""
+    opts = metrics['options']
+    theta = np.deg2rad(opts.get('theta_deg', np.rad2deg(metrics['theta_rad'])))
+    t = np.linspace(0, 2*np.pi, 361)
+    u, v = opts['axes_cm'][0]/2*np.cos(t), opts['axes_cm'][1]/2*np.sin(t)
+    paths = {}
+    for label, center in [('user', metrics['user_center_cm']), ('fit', metrics['center_cm'])]:
+        x, y = center
+        paths[label] = dict(center_cm=center,
+            ellipse_cm=np.column_stack([x+np.cos(theta)*u-np.sin(theta)*v,
+                                         y+np.sin(theta)*u+np.cos(theta)*v]).tolist(),
+            line_cm=[[x-opts['line_length_cm']/2, y], [x+opts['line_length_cm']/2, y]])
+    return dict(coordinates='cm; x right; y down', paths=paths)
+
+
+def focal_geometry_image(field, geometry, colormap, selection):
+    from PIL import ImageDraw
+    from .session import field_image
+    im = field_image(field['Z'], max(float(np.nanmax(field['Z'])), 1e-9), positive=True,
+                     annotate=True, title='RMS (mm) | integration geometry',
+                     axes=(field['X_cm']*10, field['Y_cm']*10), colormap=colormap)
+    # Work on the plot alone so off-image integration paths cannot overwrite axes.
+    plot = im.crop((48, 32, im.width-72, im.height-44))
+    draw = ImageDraw.Draw(plot)
+    x, y = field['X_cm'], field['Y_cm']
+    def points(values):
+        return [((a-x[0])/(x[-1]-x[0])*(plot.width-1),
+                 (b-y[0])/(y[-1]-y[0])*(plot.height-1)) for a, b in values]
+    for label in ('user', 'fit'):
+        paths = geometry['paths'][label]
+        color = '#eeeeee' if label == 'user' else '#111111'
+        if 'area' in selection: draw.line(points(paths['ellipse_cm']), fill=color, width=3)
+        if 'line' in selection: draw.line(points(paths['line_cm']), fill=color, width=3)
+        cx, cy = points([paths['center_cm']])[0]
+        draw.line([(cx-5,cy),(cx+5,cy)], fill=color, width=2)
+        draw.line([(cx,cy-5),(cx,cy+5)], fill=color, width=2)
+    im.paste(plot, (48, 32))
+    ImageDraw.Draw(im).text((48, im.height-33), 'White: selected center | Black: fitted center', fill='#243746')
+    return im
+
+
 def new_path(suffix):
     root = Path(os.environ.get('WATERWAVE_TMP', tempfile.gettempdir()))
     return root / ('waterwave-'+uuid.uuid4().hex+suffix)
@@ -46,7 +101,7 @@ def new_path(suffix):
 
 def save_field(field):
     path = new_path('.npz')
-    np.savez_compressed(path, **field)
+    save_npz(path, **field)
     key = uuid.uuid4().hex; fields[key] = path
     return key
 
@@ -123,7 +178,7 @@ def dispatch_field(m):
         colormap = m.get('colormap') or json.loads(str(field.get('config_json', '{}'))).get('colormap', 'jet')
         cfg = json.loads(str(field.get('config_json', '{}'))); cfg['colormap'] = colormap
         field['config_json'] = json.dumps(cfg)
-        metrics = None
+        metrics = None; profile_preview = None
         with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as archive:
             write_field_exports(archive, field, m.get('exports', ['rms_npz', 'rms_mat', 'rms_png', 'rms_csv']))
             if op == 'field_analyze':
@@ -135,6 +190,18 @@ def dispatch_field(m):
                 for label in ('user_gain', 'fit_gain'):
                     metrics[label] = {k: v for k, v in metrics[label].items() if k.split('_')[0] in selection}
                 metrics['gain_selection'] = selection
+                geometry = focal_geometry(field, metrics)
+                archive.writestr('integration_geometry.json', json.dumps(geometry, ensure_ascii=False))
+                from .session import png_bytes
+                archive.writestr('integration_geometry.png', png_bytes(focal_geometry_image(field, geometry, colormap, selection)))
+                if 'line' in selection:
+                    profile_png=png_bytes(profile_image(profiles['fit_x'], 'Horizontal RMS profile', metrics['options']['line_length_cm']))
+                    profile_preview=base64.b64encode(profile_png).decode()
+                if 'line' in selection and not m.get('full_analysis', True):
+                    values = profiles['fit_x']
+                    out = io.StringIO(); np.savetxt(out, values, delimiter=',', header='distance_cm,x_cm,y_cm,Z_mm,dZ_mm,model_mm')
+                    archive.writestr('profiles/fit_x.csv', out.getvalue())
+                    archive.writestr('profiles/fit_x.png', profile_png)
                 archive.writestr('focal.json', json.dumps(metrics, ensure_ascii=False, indent=2, allow_nan=False))
                 out = io.StringIO(); writer = csv.writer(out); writer.writerow(['metric', 'value'])
                 for key, value in metrics.items(): writer.writerow([key, json.dumps(value, ensure_ascii=False)])
@@ -151,7 +218,7 @@ def dispatch_field(m):
                         out = io.StringIO(); np.savetxt(out, values, delimiter=',', header='distance_cm,x_cm,y_cm,Z_mm,dZ_mm,model_mm')
                         archive.writestr('profiles/'+key+'.csv', out.getvalue())
                         from .session import png_bytes
-                        archive.writestr('profiles/'+key+'.png', png_bytes(profile_image(values, key)))
+                        archive.writestr('profiles/'+key+'.png', png_bytes(profile_image(values, key, metrics['options']['line_length_cm'] if key.endswith('_x') else None)))
                     with archive.open('fit.npz', 'w', force_zip64=True) as out:
                         np.savez(out, model_Z=fitted, fit_mask=mask, X_cm=field['X_cm'], Y_cm=field['Y_cm'])
                     from .session import field_image, png_bytes
@@ -161,5 +228,5 @@ def dispatch_field(m):
                             title=name, axes=(field['X_cm']*10, field['Y_cm']*10), colormap=colormap)))
             archive.writestr('provenance.json', json.dumps(clean(dict(source=str(field.get('source', '')), algorithm='final3-python-v2',
                 config=json.loads(str(field.get('config_json', '{}'))), author='kotokowa', website='https://kotokowa.github.io/webtools/water-wave/')), ensure_ascii=False))
-        return dict(**artifact(path), metrics=metrics)
+        return dict(**artifact(path), metrics=metrics, profile_preview=profile_preview)
     raise ValueError('未知 RMS 操作')

@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const {sampleGeometry, resultFilename, progressTitle} = WaterWaveUI;
 const idleTitle = document.title;
-const state = {local: false, backend: null, ready: false, busy: false, stop: false, groups: [], files: [], refFile: null, refData: null,
+const state = {local: false, nativeBase: '', backend: null, ready: false, busy: false, stop: false, groups: [], files: [], refFile: null, refData: null,
   image: null, width: 0, height: 0, roi: null, geometry: {lines: [], points: []}, history: [], mode: 'roi',
   drag: null, view: null, video: null, session: null, downloadUrl: null, referenceGeneration: 0};
 const imagePattern = /\.(png|jpe?g|tiff?|bmp|webp)$/i;
@@ -30,14 +30,16 @@ function busy(value) {
   $('stop').disabled = !value;
   refreshRun();
 }
+function apiURL(path) { return state.nativeBase+path; }
 async function detect() {
-  try {
-    if(globalThis.WATERWAVE_RUNTIME?.offline)throw Error('offline');
-    const r = await fetch('/api/info', {signal: AbortSignal.timeout(2500)});
-    state.local = r.ok && (await r.json()).mode === 'local';
-  } catch { state.local = false; }
-  $('engine').textContent = state.local ? '本地 Python · 离线计算' : '浏览器 Python · 本机计算';
-  if (state.local) $('home-link').hidden = true;
+  const candidates=globalThis.WATERWAVE_RUNTIME?.offline?[]:[''];
+  if(location.origin==='https://kotokowa.github.io')candidates.push('http://127.0.0.1:8765');
+  for(const base of candidates)try{
+    const r=await fetch(base+'/api/info',{signal:AbortSignal.timeout(2000)}),info=r.ok?await r.json():null;
+    if(info?.mode==='local'&&info.protocol===2){state.local=true;state.nativeBase=base;state.nativeGPU=Boolean(info.acceleration?.gpu?.available);break;}
+  }catch{}
+  $('engine').textContent = state.local ? (state.nativeGPU?'本机 Python + GPU':'本机 Python 加速') : '浏览器 Python · 本机计算';
+  if (state.local&&!state.nativeBase) $('home-link').hidden = true;
   const videoExport = document.querySelector('[data-export="video"]');
   videoExport.disabled = !state.local;
   if (!state.local) $('video-note').textContent = 'AVI 使用浏览器内解码并读取帧率；其他视频按输入帧率抽帧。大视频或变帧率视频建议本地版。';
@@ -52,7 +54,7 @@ async function engine() {
 async function initializeEngine() {
   if (state.local) {
     state.backend = async message => {
-      const r = await fetch('/api/rpc', {method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(message)});
+      const r = await fetch(apiURL('/api/rpc'), {method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(message)});
       const result = await r.json();
       if (!r.ok || result.error) throw Error(result.error || '本地服务异常');
       return result;
@@ -65,11 +67,21 @@ async function initializeEngine() {
     worker.onmessage = ({data}) => {
       const entry = pending.get(data.id);
       if (!entry) return;
+      clearTimeout(entry.timer);
       pending.delete(data.id);
       data.error ? entry.reject(Error(data.error)) : entry.resolve(data.result);
     };
-    worker.onerror = event => { for (const p of pending.values()) p.reject(Error(event.message || 'Python 环境加载失败，请检查网络或使用本地版')); pending.clear(); };
-    const rpc = message => new Promise((resolve,reject) => { const id=++seq; pending.set(id,{resolve,reject}); worker.postMessage({id,message}); });
+    worker.onerror = event => { for (const p of pending.values()) {clearTimeout(p.timer);p.reject(Error(event.message || 'Python 环境加载失败，请检查网络或使用本地版'));} pending.clear(); };
+    const rpc = message => new Promise((resolve,reject) => {
+      const id=++seq;
+      const timeout=['frame','frame_cached'].includes(message.op)?180000:0;
+      const timer=timeout?setTimeout(()=>{
+        const error=Error('单帧处理超过 3 分钟，已停止计算；本地已保存帧可继续');
+        state.stop=true;state.backend=null;state.booting=null;state.ready=false;state.session=null;worker.terminate();
+        for(const p of pending.values()){clearTimeout(p.timer);p.reject(error);}pending.clear();
+      },timeout):null;
+      pending.set(id,{resolve,reject,timer});worker.postMessage({id,message});
+    });
     try { await rpc({op:'boot'}); state.backend=rpc; }
     catch (e) { worker.terminate(); throw e; }
   }
@@ -151,7 +163,7 @@ async function importVideo(file) {
   try {
   status('正在导入视频…');
   if (state.local) {
-    const r=await fetch('/api/video',{method:'POST',headers:{'Content-Type':file.type || (file.name.endsWith('.avi')?'video/avi':'video/mp4')},body:file});
+    const r=await fetch(apiURL('/api/video'),{method:'POST',headers:{'Content-Type':file.type || (file.name.endsWith('.avi')?'video/avi':'video/mp4')},body:file});
     const info=await r.json(); if (!r.ok) throw Error(info.error);
     state.video={file,key:info.video,count:info.count,fps:info.fps,width:info.width,height:info.height};
     $('fps').value=info.fps;
@@ -304,7 +316,7 @@ async function finish(partial){
   if(result.field)globalThis.WaterWaveAdvanced?.addField(result.field,state.resultName.replace(/\.zip$/i,''));
   if(state.downloadUrl){URL.revokeObjectURL(state.downloadUrl);state.downloadUrl=null;}
   $('download').download=state.resultName;
-  if(state.local)$('download').href='/api/download?session='+state.session+'&filename='+encodeURIComponent(state.resultName);
+  if(state.local)$('download').href=apiURL('/api/download?session='+state.session+'&filename='+encodeURIComponent(state.resultName));
   else{const {bytes}=await rpc({op:'download',session:state.session});state.downloadUrl=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));$('download').href=state.downloadUrl;}
   $('download').textContent='下载 '+state.resultName+' ↓';$('download').hidden=false;
   if(result.note)warning(result.note);

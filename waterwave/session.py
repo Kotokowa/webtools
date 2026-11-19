@@ -8,10 +8,14 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
+import time
 import uuid
 import zipfile
 import numpy as np
+import scipy
+import PIL
 from PIL import Image, ImageDraw, ImageOps
 from scipy import signal
 from .core import Config, Reconstructor, sample_geometry, synthetic_frame
@@ -19,7 +23,7 @@ from . import __version__
 from .measurement import RMSAccumulator
 from .analysis import clean
 from .colors import color_rgb
-from .fields import save_field, describe, write_field_exports, dispatch_field, artifact
+from .fields import save_field, describe, write_field_exports, dispatch_field, artifact, save_npz
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 EXPORTS = {"height_npz", "raw_npz", "height_csv", "height_png", "displacement", "quality", "lines", "points", "temporal", "spectrum", "wavelength", "video"}
@@ -139,14 +143,21 @@ class Session:
         if self.direct_files_mode:
             path = self.directory / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(path, **arrays)
+            save_npz(path, **arrays)
             self.direct_files.append(path)
             return
         with self.zip.open(name, "w", force_zip64=True) as f:
             # np.savez uses an uncompressed inner ZIP; outer archive compresses it.
             np.savez(f, **arrays)
 
-    def process(self, image, name, frame_id, time_s=None):
+    def drain_files(self):
+        files = [{"name": p.relative_to(self.directory).as_posix(), **artifact(p)}
+                 for p in self.direct_files]
+        self.direct_files.clear()
+        return files
+
+    def process(self, image, name, frame_id, time_s=None, preview=True):
+        started = time.perf_counter()
         if self.closed:
             raise ValueError("任务已结束，请新建处理任务")
         if not math.isfinite(float(frame_id)) or int(frame_id) != frame_id:
@@ -159,6 +170,7 @@ class Session:
         if "temporal" in self.exports and (len(self.heights)+1)*pixels*4*6 > self.recon.config.temporal_limit_mb*1024**2:
             raise ValueError("时域分析预计超出内存限额；减小选区/帧数或取消振幅相位导出。已完成帧可保留下载")
         result = self.recon.restore(image)
+        restored = time.perf_counter()
         h = result["height_mm"]
         self.rms.add(h, time_s)
         seq = len(self.frames)+1
@@ -249,9 +261,48 @@ class Session:
             self.point_signals.append([float(s["height_mm"][0]) for s in samples if s["kind"] == "point"])
         self.frames.append(meta)
         self.last_height = h.copy()
-        preview = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap)
-        preview.thumbnail((1100, 850))
-        return {"summary": meta, "preview": base64.b64encode(png_bytes(preview)).decode(), "count": seq}
+        if self.direct_files_mode:
+            path = self.directory/'frame_metadata'/f'{tag}.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(meta, ensure_ascii=False), encoding='utf-8')
+            self.direct_files.append(path)
+        response = {"summary": meta, "count": seq}
+        if preview:
+            pic = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap)
+            pic.thumbnail((1100, 850))
+            response['preview'] = base64.b64encode(png_bytes(pic)).decode()
+        response['timings'] = {'restore_s': restored-started,
+                               'export_s': time.perf_counter()-restored}
+        if self.direct_files_mode:
+            response['files'] = self.drain_files()
+        return response
+
+    def cached_frame(self, data, name, frame_id, time_s, preview=False):
+        """Rebuild temporal RMS from a validated, already saved height frame."""
+        if self.exports - {'height_npz', 'height_png', 'rms_npz', 'rms_mat',
+                           'rms_csv', 'rms_png', 'focal', 'focal_line', 'focal_area'}:
+            raise ValueError('所选导出需要重新恢复原始帧')
+        with np.load(io.BytesIO(data), allow_pickle=False) as f:
+            h = f['height_mm']
+            x, y = self.recon.coordinates()
+            if (int(f['frame_id']) != frame_id or h.shape != tuple(self.recon.metadata['output_shape'])
+                or not np.allclose(f['x_mm'], x) or not np.allclose(f['y_mm'], y)):
+                raise ValueError('缓存帧的编号或物理坐标不匹配')
+        if self.frames and frame_id <= self.frames[-1]['frame_id']:
+            raise ValueError('缓存帧须严格递增')
+        self.rms.add(h, time_s)
+        meta = dict(source_name=name, frame_id=frame_id, time_s=time_s,
+                    min_mm=float(np.nanmin(h)), max_mm=float(np.nanmax(h)),
+                    rms_mm=float(np.sqrt(np.nanmean(h*h))), low_carrier_fraction=None,
+                    restored_from_cache=True)
+        self.frames.append(meta)
+        self.last_height = h
+        result = {'count': len(self.frames), 'summary': meta, 'files': []}
+        if preview:
+            pic = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap)
+            pic.thumbnail((1100, 850))
+            result['preview'] = base64.b64encode(png_bytes(pic)).decode()
+        return result
 
     def finish(self, partial=False):
         if self.finished:
@@ -340,6 +391,10 @@ class Session:
         self.field_key = save_field(rms)
         write_field_exports(self.zip, rms, self.exports)
         manifest = {"schema": "waterwave-results-v2", "version": __version__, **self.recon.metadata,
+                    "runtime": {"platform": sys.platform, "python": sys.version,
+                                "numpy": np.__version__, "scipy": scipy.__version__, "pillow": PIL.__version__,
+                                "acceleration": getattr(sys.modules.get('waterwave.acceleration'), 'INFO', {}),
+                                "opencv": getattr(sys.modules.get('cv2'), '__version__', None)},
                     "reference_name": self.reference_name, "geometry": self.geometry, "exports": sorted(self.exports),
                     "frames": self.frames, "partial": partial, "temporal_note": temporal_note,
                     "interpretation": "Relative elevation after chosen detrending. Optical u/v are not fluid particle displacements. Hilbert edge frames are unreliable. No experimental error bound is claimed."}
@@ -392,15 +447,15 @@ def dispatch(message):
         return {'preview': base64.b64encode(png_bytes(im)).decode()}
     if op == "frame":
         return s.process(decode_image(base64.b64decode(message["data"], validate=True)),
-                         message["name"], message["frame_id"], message.get("time_s"))
+                         message["name"], message["frame_id"], message.get("time_s"), message.get('preview', True))
+    if op == 'frame_cached':
+        return s.cached_frame(base64.b64decode(message['data'], validate=True),
+                              message['name'], message['frame_id'], message.get('time_s'), message.get('preview', False))
     if op == "finish":
         path = s.finish(bool(message.get("partial", False)))
         with zipfile.ZipFile(path) as z:
             note = json.loads(z.read("manifest.json"))["temporal_note"]
-        files=[]
-        for item in s.direct_files:
-            if item.exists():
-                files.append({"name": str(item.relative_to(s.directory)).replace('\\','/'), **artifact(item)})
+        files = s.drain_files()
         return {"filename": path.name, **artifact(path), "field": describe(s.field_key), "note": note, "files": files}
     if op == "dispose":
         s.dispose()

@@ -19,6 +19,17 @@ self.onmessage = async ({data: {id, message}}) => {
   try {
     const py = await boot();
     if (message.op === 'boot') return self.postMessage({id, result: {ready: true}});
+    if (message.op === 'artifact_bytes') {
+      py.globals.set('_artifact', message.artifact);
+      const path = py.runPython("str(__import__('waterwave.fields', fromlist=['artifacts']).artifacts[_artifact])");
+      py.globals.delete('_artifact');
+      const size = Math.min(4*1024*1024, py.FS.stat(path).size-message.offset);
+      if (!Number.isSafeInteger(message.offset) || message.offset < 0 || size <= 0) throw Error('读取范围无效');
+      const bytes = new Uint8Array(size), stream = py.FS.open(path, 'r');
+      try { py.FS.read(stream, bytes, 0, size, message.offset); }
+      finally { py.FS.close(stream); }
+      return self.postMessage({id, result: {bytes: bytes.buffer, size}}, [bytes.buffer]);
+    }
     if (message.op === 'download') {
       py.globals.set('_key', message.session);
       const path = py.runPython('str(sessions[_key].path)');
