@@ -323,6 +323,7 @@ async function finish(partial){
   return result;
 }
 async function run(){
+  $('result-panel').querySelector('h2').firstChild.textContent='恢复预览 ';
   warning('');const cfg=config(),items=selectedFrames(),options=settings();
   const timeOrigin=state.video?1:(dynamicFiles().some((f,i)=>frameId(f,i)===0)?0:1);
   if(!state.refData)throw Error('缺少静水参考图');

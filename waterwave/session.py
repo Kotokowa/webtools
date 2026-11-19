@@ -271,11 +271,23 @@ class Session:
             pic = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap)
             pic.thumbnail((1100, 850))
             response['preview'] = base64.b64encode(png_bytes(pic)).decode()
+            if self.direct_files_mode:
+                response.update(self.rms_preview())
         response['timings'] = {'restore_s': restored-started,
                                'export_s': time.perf_counter()-restored}
         if self.direct_files_mode:
             response['files'] = self.drain_files()
         return response
+
+    def rms_preview(self):
+        if self.rms.frequency:
+            return {}
+        z = np.sqrt(self.rms.sum2/np.maximum(self.rms.count, 1))
+        z[(self.rms.count < self.rms.fraction*self.rms.n) | (self.rms.count == 0)] = np.nan
+        limit = max(float(np.nanmax(z)), 1e-9) if np.isfinite(z).any() else 1.
+        pic = field_image(z, limit, positive=True, colormap=self.recon.config.colormap)
+        pic.thumbnail((1100, 850))
+        return dict(rms_preview=base64.b64encode(png_bytes(pic)).decode(), rms_limit_mm=limit)
 
     def cached_frame(self, data, name, frame_id, time_s, preview=False):
         """Rebuild temporal RMS from a validated, already saved height frame."""
@@ -302,6 +314,8 @@ class Session:
             pic = field_image(h, self.recon.config.color_limit_mm, colormap=self.recon.config.colormap)
             pic.thumbnail((1100, 850))
             result['preview'] = base64.b64encode(png_bytes(pic)).decode()
+            if self.direct_files_mode:
+                result.update(self.rms_preview())
         return result
 
     def finish(self, partial=False):

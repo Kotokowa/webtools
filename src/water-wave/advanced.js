@@ -122,8 +122,11 @@
   function showBatchPreview(result,phase,name,done,total){
     if(!result?.preview)return;
     $('result-panel').hidden=false;
-    $('result').src='data:image/png;base64,'+result.preview;
+    $('result').src='data:image/png;base64,'+(result.rms_preview||result.preview);
+    $('result-panel').querySelector('h2').firstChild.textContent=result.rms_preview?'累计 RMS 预览 ':'恢复预览 ';
     $('result-frame').textContent=`${phase} · ${name} · ${done}/${total}`;
+    $('max-label').textContent=result.rms_preview?result.rms_limit_mm.toFixed(3)+' mm':'+'+$('color_limit_mm').value+' mm';
+    $('min-label').textContent=result.rms_preview?'0 mm':'−'+$('color_limit_mm').value+' mm';
   }
   async function measure(task,options,dir,phase='恢复',resume=false){
     if(task.errors?.length)throw Error(task.errors.join('；'));
@@ -148,7 +151,7 @@
       }
       const init=await rpc({op:'start',data,settings:options});session=init.session;
       for(const frame of frames){if(state.stop)break;const began=performance.now();status(`${phase} · ${files[0].name} · ${done+1}/${frames.length} · 读取帧`);document.title=progressTitle(done,frames.length);$('progress').max=frames.length;$('progress').value=done;
-        const preview=done===0||(done+1)%50===0||done+1===frames.length;
+        const preview=done===0||(done+1)%50===0||done+1===Math.ceil(frames.length/2)||done+1===frames.length;
         const args={session,name:video?files[0].name:frame.file.name,frame_id:frame.id,time_s:options.config.fps>0?(frame.id-origin)/options.config.fps:null,preview};
         let frameResult,reused=false;
         if(resume&&dir&&!options.exports.some(e=>['raw_npz','height_csv','displacement','quality','lines','points','spectrum','temporal','wavelength','video'].includes(e))){
@@ -168,7 +171,7 @@
         done++;$('progress').value=done;document.title=progressTitle(done,frames.length);
         const timing={frame_id:frame.id,reused,elapsed_s:(performance.now()-began)/1000,read_s:(readEnd-began)/1000,save_s:(performance.now()-saveStart)/1000,...frameResult.timings};
         if(dir)await writeText(dir,'progress.json',JSON.stringify({completed:done,total:frames.length,last_frame:frame.id,timing},null,2));
-        if(done===1||done%50===0||done===frames.length){showBatchPreview(frameResult,phase,files[0].name,done,frames.length);}
+        if(preview){showBatchPreview(frameResult,phase,files[0].name,done,frames.length);}
         status(`${phase} · ${files[0].name} · ${done}/${frames.length} · ${reused?'已复用':'已保存'} · ${timing.elapsed_s.toFixed(1)} 秒/帧${preview?' · 已更新预览':''}`);
       }
       if(!done)throw Error('已取消');document.title=progressTitle(done,frames.length,true);status(`${phase} · ${files[0].name} · ${done}/${frames.length} · 正在保存结果`);const result=await rpc({op:'finish',session,partial:state.stop});const name=resultFilename(files.map(f=>f.name),!!video);
