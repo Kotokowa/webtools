@@ -71,7 +71,11 @@ def profile_pair(images):
 
 def fit_report(profiles, residual, metrics):
     from PIL import Image, ImageOps
-    panels = [profile_image(profiles['fit_'+direction], f'Fitted {direction.upper()} section', uncertainty=True) for direction in ('x','y')]
+    panels = []
+    for direction in ('x','y'):
+        width = metrics[f'fit_{direction}_fwhm_cm']
+        title = f'Fitted {direction.upper()} section' + (f' | FWHM {width:.3g} cm' if width is not None else '')
+        panels.append(profile_image(profiles['fit_'+direction], title, uncertainty=True))
     samples = profiles.get('encircled_energy')
     if samples is not None and samples[-1,0] > samples[0,0]:
         data = np.full((len(samples), 6), np.nan); data[:, 0] = samples[:,0]; data[:, 3] = 100*samples[:,1]

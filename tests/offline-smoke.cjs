@@ -13,7 +13,7 @@ const {chromium}=require('playwright');const {aviFixture}=require('./avi-fixture
   assert.equal(await page.locator('header #home-link').getAttribute('href'),'https://kotokowa.github.io/webtools/');
   assert.equal(await page.locator('#colormap').inputValue(),'jet');
   assert(await page.locator('#source-options').evaluate(panel=>panel.open));
-  assert.equal(await page.locator('[data-task]').count(),5);
+  assert.equal(await page.locator('.task-nav button[data-task]').count(),5);
   await page.locator('[data-task=batch]').click();
   assert.equal(await page.locator('#batch-directory').textContent(),'选择本地实验数据目录');
   assert.equal(await page.locator('#reference-directory').textContent(),'选择本地参考场文件目录');
