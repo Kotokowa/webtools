@@ -9,10 +9,10 @@
     const details=group(title,[],id);details.className='module';
     const body=document.createElement('div');body.className='module-body';body.append(...panel.childNodes);details.append(body);panel.append(details);return details;
   }
-  const source=document.querySelector('aside > section:first-child');
-  const physical=document.querySelector('aside > section:nth-child(2)');
+  const sidebar=document.querySelector('.layout > aside');
+  const [source,physical]=sidebar.children;
   const recovery=$('pipeline').closest('section'),batch=$('batch-directory').closest('section'),focus=$('focal-condition').closest('section');
-  const viewer=document.querySelector('.viewer-panel'),workspace=document.querySelector('.workspace');
+  const workbench=$('workbench');
   const sourceFold=module(source,'影像来源','source-options');
   module(physical,'物理标定','physical-options');
   const recoveryBody=recovery.querySelector('.two');
@@ -25,12 +25,15 @@
   const batchFrame=group('帧范围',[$('batch-start').parentElement.parentElement]);
   $('batch-repeats').closest('label').after(batchFrame);
   const batchReference=group('无波带片参考',[$('reference-directory'),$('reference-root-row'),...['reference-format','reference-static-format','reference-rms-format'].map(id=>$(id).closest('label'))],'batch-reference-options');
-  batch.querySelector('.mini-actions').before(batchReference);
+  const batchActions=batch.querySelector('.mini-actions');batchActions.before(batchReference);batchActions.id='batch-actions';$('other-actions').prepend(batchActions);
+  const naming=group('命名规则',['batch-format','static-format','batch-extensions'].map(id=>$(id).closest('label')),'batch-naming');
+  $('batch-variable').closest('label').after(naming);
+  const excitation=group('振幅设置',['batch-amp','batch-unit'].map(id=>$(id).closest('label')));naming.after(excitation);
   const batchFold=module(batch,'本地批处理','batch-options');
   const frameRange=group('帧范围',[$('start').parentElement.parentElement,$('frame-list').closest('label')],'frame-options');
   $('fps').closest('label').before(frameRange);
-  const sourceInfo=group('文件信息',[$('source-info'),$('ref-info'),$('video-note')]);sourceFold.querySelector('.module-body').append(sourceInfo);
-  const viewerFold=module(viewer,'范围与采样','selection-options');
+  const sourceInfo=group('文件信息',[$('source-info'),$('video-note')]);sourceFold.querySelector('.module-body').append(sourceInfo);
+  frameRange.open=true;
   document.querySelector('.geometry-editor').open=false;
   const rawReference=group('恢复无波带片参考', ['raw-reference-static','raw-reference-files','raw-reference-folder'].map(id=>$(id).closest('label')).concat($('compute-reference')),'raw-reference-options');
   focus.querySelector('.import-grid').after(rawReference);
@@ -39,9 +42,14 @@
   for(const id of ['focus-half','focus-line','focus-axis-a','focus-axis-b'])focusExtra.append($(id).closest('label'));
   const focusDetails=group('分析参数',[focusExtra,$('focus-fill').closest('label'),$('focus-auto-angle').closest('label'),$('focus-angle').closest('label')],'focus-options');
   focusGrid.after(focusDetails);
-  const metrics=$('focal-metrics'),metricsGroup=group('完整结果',[metrics],'full-metrics');focus.append(metricsGroup);
-  const quickMetrics=document.createElement('div');quickMetrics.id='focal-summary';quickMetrics.className='metrics';quickMetrics.hidden=true;metricsGroup.before(quickMetrics);
-  const focusFold=module(focus,'RMS 与聚焦','focal-module');
+  const focusFold=module(focus,'RMS 来源','focal-module');
+  focusFold.open=true;
+  const dialogs=[['selection-open','selection-dialog'],['export-open','export-dialog'],['focus-open','focus-dialog']];
+  for(const [button,id] of dialogs){
+    const dialog=$(id),notice=document.createElement('p');notice.className='dialog-warning warning';notice.hidden=true;notice.setAttribute('role','alert');dialog.querySelector('.dialog-body').prepend(notice);
+    $(button).onclick=()=>{if(dialog.open)return;notice.hidden=true;dialog.showModal();if(id==='selection-dialog')draw();};
+    for(const close of dialog.querySelectorAll('[data-dialog-close]'))close.onclick=()=>dialog.close();
+  }
   const exportGrid=document.querySelector('.export-grid');
   const moreGrid=document.createElement('div');moreGrid.className='export-grid';
   const common=new Set(['height_npz','height_png','height_csv','lines','points','video','focal_line','focal_area']);
@@ -49,36 +57,45 @@
   const moreExports=group('更多导出',[moreGrid],'more-exports');exportGrid.after(moreExports);
   const palette=document.createElement('label');palette.innerHTML='色图<select id="colormap"></select>';
   for(const name of Object.keys(WaterWaveColors))palette.querySelector('select').add(new Option(name,name));
-  const colorSample=document.createElement('div');colorSample.id='color-sample';colorSample.setAttribute('aria-hidden','true');palette.append(colorSample);
   document.querySelector('.output-options').prepend(palette);
-  document.querySelector('.output-options .help').hidden=true;
-  const tasks=document.createElement('nav');tasks.className='task-nav';tasks.setAttribute('aria-label','处理方式');
+  const tasks=document.querySelector('.task-nav');
   for(const [key,title] of [['images','图片／序列'],['folder','文件夹'],['video','视频'],['batch','本地批处理'],['focus','聚焦分析']]){
     const button=document.createElement('button');button.type='button';button.dataset.task=key;button.textContent=title;button.setAttribute('aria-pressed','false');button.onclick=()=>selectTask(key);tasks.append(button);
   }
-  document.querySelector('.layout').before(tasks);
-  let mode=null;
   function selectTask(key){
-    mode=key;for(const b of tasks.children)b.setAttribute('aria-pressed',String(b.dataset.task===key));
-    source.hidden=key==='batch'||key==='focus';batch.hidden=key!=='batch';
+    workbench.dataset.task=key;for(const button of tasks.children)button.setAttribute('aria-pressed',String(button.dataset.task===key));
+    source.hidden=key==='batch'||key==='focus';batch.hidden=key!=='batch';focus.hidden=key!=='focus';
+    sidebar.prepend(key==='batch'?batch:key==='focus'?focus:source);
+    $('single-actions').hidden=source.hidden;batchActions.hidden=batch.hidden;$('focus-actions').hidden=focus.hidden;
+    $('result-empty').textContent=key==='focus'?'暂无 RMS 场':'暂无恢复结果';
     sourceFold.open=['images','folder','video'].includes(key);batchFold.open=key==='batch';
     for(const [task,id] of [['images','files'],['folder','folder'],['video','video-file']])$(id).closest('label').hidden=key!==task;
     if(key==='focus'){
-      workspace.prepend(focus);focusFold.open=true;viewerFold.open=false;
       rawReference.append(batchFrame,$('fps').closest('label'));
     } else {
-      workspace.append(focus);focusFold.open=false;
       $('batch-repeats').closest('label').after(batchFrame);
       if(key==='batch')batchFrame.append($('fps').closest('label'));
       else sourceInfo.before($('fps').closest('label'));
     }
+    refreshControls();
   }
   function refreshExports(){
     const count=moreGrid.querySelectorAll('input:checked').length;
     moreExports.querySelector('summary').textContent='更多导出'+(count?'（已选 '+count+'）':'');
   }
+  function refreshControls(){
+    $('selection-open').disabled=state.busy||!state.image;
+    for(const id of ['focus-open','focus-analyze','focus-export'])$(id).disabled=state.busy||!$('focal-condition').options.length;
+  }
+  function requestSamples({exports,geometry}){
+    const missing=[];
+    if(!geometry.lines?.length&&exports.some(item=>['lines','wavelength'].includes(item)))missing.push('剖面线');
+    if(!geometry.points?.length&&exports.some(item=>['points','spectrum'].includes(item)))missing.push('采样点');
+    if(!missing.length||$('selection-open').disabled)return false;
+    $('selection-open').click();warning('所选导出项需要'+missing.join('和')+'。');return true;
+  }
   function gradient(){const colors=WaterWaveColors[$('colormap').value];return 'linear-gradient(to top,'+colors.map(c=>'rgb('+c.join(',')+')').join(',')+')';}
-  function legend(){const value=gradient();colorSample.style.background=value.replace('to top','to right');const bar=document.querySelector('.color-legend div');bar.style.background=value;}
+  function legend(){document.querySelector('.color-legend div').style.background=gradient();}
   let renderVersion=0;
   async function recolor(){
     legend();const version=++renderVersion,colormap=$('colormap').value;
@@ -90,13 +107,11 @@
   }
   $('colormap').addEventListener('change',catchAction(recolor));
   document.addEventListener('change',e=>{if(e.target.matches('[data-export]'))refreshExports();});
-  const method=document.querySelector('.method'),methodDetails=group('方法与说明',[]);method.before(methodDetails);methodDetails.append(method);
   globalThis.WaterWaveLayout={
-    recolor,
-    referenceReady(){if(mode==='focus')selectTask('images');viewerFold.open=true;},
+    recolor,refreshControls,requestSamples,
     refreshExports(){refreshExports();legend();},
-    fieldReady(){focus.hidden=false;},
-    showMetrics(metrics){quickMetrics.replaceChildren();for(const [key,title] of [['line_gain','线聚焦效率'],['area_gain','面聚焦效率']])if(key in (metrics.fit_gain||{})){const item=document.createElement('div');item.textContent=title;const value=document.createElement('b');value.textContent=metrics.fit_gain[key]===null?'—':Number(metrics.fit_gain[key]).toPrecision(4);item.append(value);quickMetrics.append(item);}quickMetrics.hidden=false;}
+    showMetrics(metrics){const summary=$('focal-summary');summary.replaceChildren();for(const [key,title] of [['line_gain','线聚焦效率'],['area_gain','面聚焦效率']])if(key in (metrics?.fit_gain||{})){const item=document.createElement('div');item.textContent=title;const value=document.createElement('b');value.textContent=metrics.fit_gain[key]===null?'—':Number(metrics.fit_gain[key]).toPrecision(4);item.append(value);summary.append(item);}summary.hidden=!summary.childElementCount;}
   };
+  selectTask('images');
   refreshExports();legend();
 })();

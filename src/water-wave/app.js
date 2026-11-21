@@ -12,8 +12,8 @@ const collator = new Intl.Collator('zh', {numeric: true, sensitivity: 'base'});
 const numericConfig = ['water_depth_mm','acrylic_mm','n_water','n_acrylic','n_air','square_mm','mm_per_pixel','edge_crop','filter_ratio','color_limit_mm','fps','temporal_limit_mb'];
 let busyDepth=0;
 function status(text) { $('status').textContent = text; }
-function warning(text) { $('warnings').textContent = text; $('warnings').hidden = !text; }
-function report(error) { warning(String(error.message || error)); status('操作未完成，请检查上方提示。'); }
+function warning(text) { for(const notice of [$('warnings'),document.querySelector('dialog[open] .dialog-warning')]){if(notice){notice.textContent=text;notice.hidden=!text;}} }
+function report(error) { warning(String(error.message || error)); status('操作未完成。'); }
 function catchAction(fn) { return (...args) => Promise.resolve().then(() => fn(...args)).catch(report); }
 function b64(blob) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result.split(',')[1]); r.onerror = reject; r.readAsDataURL(blob); }); }
 function from64(s, name) { const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0)); return new File([bytes], name, {type:'image/png'}); }
@@ -23,12 +23,13 @@ function busy(value) {
   busyDepth=Math.max(0,busyDepth+(value?1:-1));
   if ((busyDepth>0)===state.busy) return;
   value=busyDepth>0;state.busy = value;
-  document.querySelectorAll('button,input,select').forEach(el => {
+  document.querySelectorAll('button:not([data-dialog-close]),input,select').forEach(el => {
     if (value) { el.dataset.wasDisabled = el.disabled ? '1':'0'; el.disabled = true; }
     else el.disabled = el.dataset.wasDisabled === '1';
   });
   $('stop').disabled = !value;
   refreshRun();
+  globalThis.WaterWaveLayout?.refreshControls();
 }
 function apiURL(path) { return state.nativeBase+path; }
 async function detect() {
@@ -141,6 +142,7 @@ async function chooseGroup(i) {
     status('已识别图片序列；请从下拉框选择静水参考图，或单独导入。');
   }
   updateCount();
+  globalThis.WaterWaveLayout?.refreshControls();
 }
 async function setReference(file, external=false) {
   const generation=++state.referenceGeneration;
@@ -152,10 +154,10 @@ async function setReference(file, external=false) {
   const changed=state.width!==info.width || state.height!==info.height;
   state.refFile=file; state.refData=data; state.externalReference=external; state.image=image; state.width=info.width; state.height=info.height;
   if (changed || !state.roi) { state.roi=[0,0,state.width,state.height]; state.geometry={lines:[],points:[]}; state.history=[]; }
-  $('ref-info').textContent=`参考：${file.name} · ${info.width} × ${info.height} px。${changed?'已重置范围，请框选或导入记录。':'已保留原尺寸范围记录。'}`;
+  $('ref-info').textContent=`静水图：${file.name} · ${info.width} × ${info.height} px`;
   $('empty-state').hidden=true; syncROI(); draw(); updateCount();
-  globalThis.WaterWaveLayout?.referenceReady();
-  status('参考图已就绪。框选无遮挡格纹范围，按需添加剖面线与采样点。');
+  globalThis.WaterWaveLayout?.refreshControls();
+  status('静水图已就绪。');
 }
 async function importVideo(file) {
   await detected; await releaseVideo();
@@ -220,7 +222,8 @@ function syncROI() {
 }
 function draw() {
   const canvas=$('canvas'),ctx=canvas.getContext('2d');
-  const width=Math.max(280,canvas.parentElement.clientWidth-2),height=state.image?Math.max(240,Math.min(600,width*state.height/state.width)):360;
+  const width=canvas.parentElement.clientWidth;if(!width)return;
+  const height=state.image?Math.max(120,Math.min(window.innerHeight*.54,width*state.height/state.width)):180;
   const dpr=window.devicePixelRatio||1;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);canvas.style.height=height+'px';ctx.scale(dpr,dpr);
   ctx.fillStyle='#edf2f5';ctx.fillRect(0,0,width,height);
   if (!state.image) return;
@@ -318,7 +321,7 @@ async function finish(partial){
   $('download').download=state.resultName;
   if(state.local)$('download').href=apiURL('/api/download?session='+state.session+'&filename='+encodeURIComponent(state.resultName));
   else{const {bytes}=await rpc({op:'download',session:state.session});state.downloadUrl=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));$('download').href=state.downloadUrl;}
-  $('download').textContent='下载 '+state.resultName+' ↓';$('download').hidden=false;
+  $('download').title=state.resultName;$('download').hidden=false;
   if(result.note)warning(result.note);
   return result;
 }
@@ -329,7 +332,7 @@ async function run(){
   if(!state.refData)throw Error('缺少静水参考图');
   if(state.video&&(state.width!==state.video.width||state.height!==state.video.height))throw Error('视频与参考图尺寸不同；请使用相同裁剪与机位的数据');
   if(state.video?.key||state.video?.decoder)cfg.fps=options.config.fps=state.video.fps;
-  if(options.exports.includes('spectrum')&&!state.geometry.points.length)throw Error('点频谱需要至少一个采样点');
+  if(globalThis.WaterWaveLayout?.requestSamples(options))return;
   const group=state.groups[Number($('dataset').value)];
   state.resultName=resultFilename(state.video?[state.video.file.name]:items.map(item=>item.file.name),!!state.video,group?.name==='所选图片'?'':group?.name||'');
   if(state.session){await rpc({op:'dispose',session:state.session});state.session=null;}
@@ -369,6 +372,7 @@ $('ref-file').onchange=catchAction(e=>{if(e.target.files[0])return setReference(
 $('video-file').onchange=catchAction(e=>{if(e.target.files[0])return importFiles([e.target.files[0]]);});
 $('fps').onchange=()=>{if(state.video?.element){const fps=Number($('fps').value);if(fps>0){state.video.fps=fps;state.video.count=Math.floor(state.video.element.duration*fps);updateCount();}}else if(state.video?.key||state.video?.decoder){$('fps').value=state.video.fps;warning('该视频帧率从文件读取；若元数据不正确，请先修正视频时间信息。');}};
 $('demo').onclick=catchAction(async()=>{
+  document.querySelector('[data-task="images"]').click();
   busy(true);try{status('生成已知高度的合成棋盘格序列…');const ref=await rpc({op:'demo',reference:true});const files=[from64(ref.data,'reference.png')];for(let i=0;i<12;i++){const r=await rpc({op:'demo',phase:i*Math.PI/6});files.push(from64(r.data,`demo_${String(i+1).padStart(4,'0')}.png`));}await importFiles(files);$('fps').value=12;$('water_depth_mm').value=20;$('acrylic_mm').value=10;$('square_mm').value=1.5;$('mm_per_pixel').value=0;$('n_water').value=1.33;$('n_acrylic').value=1.49;$('n_air').value=1.00029;$('edge_crop').value=10;$('filter_ratio').value=1;$('unwrap').checked=true;$('integration').value='difference';$('remove_mean_displacement').checked=true;$('detrend').value='plane';$('color_limit_mm').value=.4;state.roi=[0,0,256,256];state.geometry={lines:[[[20,128],[235,128]]],points:[[128,128]]};state.history=['lines','points'];document.querySelectorAll('[data-export]').forEach(el=>el.checked=['height_npz','height_png','lines','points','focal_line','focal_area'].includes(el.dataset.export));globalThis.WaterWaveLayout?.refreshExports();syncROI();draw();status('合成示例已就绪：12 帧、峰值高度 0.3 mm。点击“开始恢复波场”。');}finally{busy(false);}
 });
 new ResizeObserver(draw).observe($('canvas').parentElement);draw();

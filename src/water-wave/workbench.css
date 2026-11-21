@@ -1,0 +1,140 @@
+:root {
+  color-scheme: light;
+  font: 13px/1.45 system-ui, "Microsoft YaHei", sans-serif;
+  color: #243746;
+  background: #f6f8fa;
+  --accent: #176b98;
+  --border: #d5dee5;
+  --muted: #536775;
+  --surface: #fff;
+  --plot-height: clamp(180px, calc(100dvh - 200px), 750px);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+button, input, select { font: inherit; }
+button, .file-button, .download {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 27px; padding: 2px 8px; border: 1px solid #c7d3dc; border-radius: 4px;
+  background: var(--surface); color: inherit; cursor: pointer; text-decoration: none;
+}
+button:hover:not(:disabled), .file-button:hover, .download:hover { background: #eef5f9; border-color: #93adbe; }
+button:disabled { opacity: .48; cursor: not-allowed; }
+.primary { background: var(--accent); border-color: var(--accent); color: white; }
+.primary:hover:not(:disabled) { background: #12587e; border-color: #12587e; }
+:focus-visible, .file-button:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 16px; row-gap: 4px; padding: 6px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+header nav, .brand, .task-nav, .tool-actions, .mini-actions, .toolbar, .run-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+header nav, .brand { gap: 11px; }
+header nav a { text-decoration: none; }
+header nav a:hover { text-decoration: underline; }
+h1 { margin: 0; font-size: 16px; font-weight: 650; }
+h2 { margin: 0; font-size: 14px; font-weight: 650; min-width: 0; overflow-wrap: anywhere; }
+h2 small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.badge { color: var(--muted); font-size: 12px; }
+.link-button, .link-button:hover:not(:disabled) { border-color: transparent; background: transparent; min-height: 0; padding: 0; color: var(--accent); }
+.link-button:hover:not(:disabled) { text-decoration: underline; }
+#workbench { display: grid; gap: 8px; padding: 8px 12px 10px; width: min(100%, 1650px); margin-inline: auto; }
+.workbench-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.task-nav [aria-pressed="true"], .toolbar .selected { border-color: #91afc2; background: #e4f0f7; color: #104861; font-weight: 650; }
+.layout { display: grid; grid-template-columns: minmax(265px, 320px) minmax(0, 1fr); gap: 8px; min-height: 0; }
+aside { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 5px; }
+aside > section { flex: none; }
+.panel, dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; }
+.panel { min-width: 0; padding: 8px; }
+.panel:has(> .module) { padding: 0; }
+.module { margin: 0; }
+summary { color: #364e5d; cursor: pointer; }
+.module > summary { padding: 5px 8px; font-weight: 650; }
+.module[open] > summary { border-bottom: 1px solid #e7edf1; }
+.module-body { padding: 5px 8px 7px; }
+.module-body > :first-child, .option-group > summary + :is(.two, .three) > label { margin-top: 0; }
+.module-body > .import-grid:not(:has(> :not([hidden]))) { display: none; }
+.two, .three, .import-grid, .roi-row, .export-grid { display: grid; gap: 5px 7px; }
+.two, .import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.import-grid:has(> :only-child), .import-grid:has(> [hidden]):has(> :not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+label { display: block; margin-top: 5px; font-size: 12px; color: #364e5d; }
+input:not([type="checkbox"]):not([type="file"]), select { display: block; width: 100%; min-width: 0; margin-top: 2px; padding: 2px 5px; height: 25px; border: 1px solid #c7d3dc; border-radius: 3px; background: #fff; color: #243746; }
+input[type="checkbox"] { accent-color: var(--accent); flex-shrink: 0; margin: 0; }
+.file-button { position: relative; overflow: hidden; display: flex; width: 100%; margin-top: 4px; }
+.file-button input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.file-button:has(:disabled) { opacity: .55; }
+.check { display: flex; align-items: center; gap: 5px; }
+.help, label small { font-size: 11px; color: var(--muted); }
+.help { margin: 4px 0 0; overflow-wrap: anywhere; }
+.help:empty { display: none; }
+details:not(.module) { margin-top: 6px; border-top: 1px solid #e7edf1; padding-top: 4px; }
+details:not(.module) > summary { font-size: 12px; font-weight: 550; }
+.option-group > button { margin-top: 4px; }
+.directory-row { display: flex; align-items: center; justify-content: space-between; gap: 5px; font-size: 12px; overflow-wrap: anywhere; margin-top: 3px; }
+.directory-clear { min-height: 21px; padding: 0 5px; }
+#batch-list { max-height: 9rem; overflow: auto; overflow-wrap: anywhere; font-size: 12px; }
+#batch-list:not(:empty) { margin-top: 5px; }
+#repeat-notice { position: fixed; z-index: 1; right: 12px; bottom: 85px; padding: 6px 9px; border: 1px solid #abc2d1; border-radius: 4px; background: #f1f8fc; }
+.workspace { min-height: 0; min-width: 0; overflow: auto; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-bottom: 6px; }
+#result-empty { display: grid; place-items: center; min-height: 150px; height: 100%; color: var(--muted); font-size: 13px; }
+#workbench[data-task="focus"] #result-panel, #workbench:not([data-task="focus"]) #focal-result,
+#workbench:is([data-task="focus"],[data-task="batch"]) #download,
+#workbench[data-task="focus"] .workspace:has(#focal-result:not([hidden])) #result-empty,
+#workbench:not([data-task="focus"]) .workspace:has(#result-panel:not([hidden])) #result-empty { display: none; }
+.result-layout { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 6px; background: #f6f8fa; }
+.result-layout img { display: block; min-width: 0; max-width: calc(100% - 60px); max-height: var(--plot-height); object-fit: contain; }
+.color-legend { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.color-legend div { height: clamp(72px, 19vh, 160px); width: 12px; border: 1px solid var(--border); }
+.focal-plots:has(#focal-profile[open]:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 8px; align-items: center; }
+.focal-view { position: relative; overflow: hidden; width: fit-content; max-width: 100%; margin-inline: auto; }
+.focal-view img { display: block; max-width: 100%; max-height: var(--plot-height); }
+.focal-view img:not([src]) { display: none; }
+#focal-image { cursor: crosshair; max-height: 53dvh; }
+.focal-overlay { position: absolute; inset: 0; pointer-events: none; }
+.focal-overlay > * { position: absolute; translate: -50% -50%; }
+.focal-ellipse { border: 1.5px dashed #fff; border-radius: 50%; box-shadow: 0 0 2px #000; }
+.focal-line { height: 2px; background: #fff; box-shadow: 0 0 2px #000; }
+.focal-marker { color: #fff; text-shadow: 0 0 3px #000; font-size: 22px; line-height: 1; }
+#focal-profile-image { display: block; max-width: 100%; max-height: var(--plot-height); object-fit: contain; }
+#focal-metrics { max-height: 15rem; overflow: auto; font-size: 11px; white-space: pre-wrap; }
+.run-panel { padding: 5px 8px; }
+#status { margin: 0 0 0 3px; flex: 1 1 160px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+progress { display: block; margin: 4px 0 0; width: 100%; height: 4px; accent-color: var(--accent); }
+.metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; }
+.metrics:not(:empty) { margin-top: 4px; }
+.metrics b { margin-left: 4px; }
+.warning { margin: 4px 0 0; padding: 4px 6px; background: #fff3dd; color: #634413; font-size: 12px; overflow-wrap: anywhere; }
+dialog { padding: 0; width: min(840px, calc(100vw - 22px)); max-width: none; max-height: calc(100dvh - 22px); color: inherit; overflow: hidden; }
+dialog[open] { display: flex; flex-direction: column; }
+dialog::backdrop { background: #24374666; }
+#export-dialog, #focus-dialog { width: min(660px, calc(100vw - 22px)); }
+.dialog-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; padding: 6px 9px; border-bottom: 1px solid var(--border); }
+.dialog-body { overflow: auto; padding: 7px 9px 9px; }
+.dialog-warning { margin: 0 0 5px; }
+.toolbar { margin-bottom: 5px; }
+.spacer { flex: 1; }
+.canvas-shell { position: relative; background: #edf2f5; }
+canvas { display: block; width: 100%; touch-action: none; cursor: crosshair; }
+#empty-state { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+.roi-row { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; }
+.sample-fields, .sample-row { display: flex; flex-wrap: wrap; align-items: end; gap: 3px 6px; }
+.sample-fields > label, .sample-row > label { flex: 1 1 72px; }
+.sample-row { margin-top: 4px; }
+.export-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.export-item { display: flex; align-items: center; gap: 5px; min-height: 29px; padding: 3px 5px; margin: 0; border: 1px solid #e2e8ec; border-radius: 3px; }
+.export-item small { display: block; line-height: 1.25; }
+.output-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.focus-editor .focal-view { margin-bottom: 5px; }
+@media (min-width: 820px) and (min-height: 520px) {
+  body { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  #workbench { min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; }
+  aside { overflow: auto; scrollbar-gutter: stable; }
+}
+@media (max-width: 819px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .run-panel { position: sticky; bottom: 0; z-index: 1; }
+}
+@media (max-width: 540px) {
+  #workbench { padding-inline: 6px; }
+  .export-grid, .focal-plots:has(#focal-profile[open]:not([hidden])) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .roi-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

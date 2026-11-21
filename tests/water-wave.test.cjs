@@ -9,7 +9,7 @@ test('static build ships the exact desktop Python core and separate tool assets'
   for (const name of ['__init__.py', 'core.py', 'session.py', 'colors.py', 'colormaps.json']) {
     assert.deepEqual(fs.readFileSync(path.join(root,'waterwave',name)), fs.readFileSync(path.join(root,'dist/water-wave/python',name)));
   }
-  for (const name of ['index.html','app.js','ui-utils.js','video-worker.js','style.css','worker.js','guide.html','LICENSE-FCD.txt']) {
+  for (const name of ['index.html','app.js','ui-utils.js','video-worker.js','style.css','workbench.css','worker.js','guide.html','LICENSE-FCD.txt']) {
     assert.ok(fs.statSync(path.join(root,'dist/water-wave',name)).size > 0);
   }
   const offline = fs.readFileSync(path.join(root,'dist/nfc-offline.html'),'utf8');
@@ -39,13 +39,25 @@ test('local directory controls use the user-facing names and expose unlink butto
 test('batch processing keeps frame previews and reports the output directory', () => {
   const advanced=fs.readFileSync(path.join(root,'src','water-wave','advanced.js'),'utf8');
   assert.match(advanced,/function showBatchPreview/);
-  assert.match(advanced,/done%50===0/);
+  assert.match(advanced,/\(done\+1\)%50===0/);
   assert.match(advanced,/已更新预览/);
   assert.match(advanced,/结果目录|继续/);
   assert.match(advanced,/options\.direct_files=Boolean\(dir\)/);
   const video=fs.readFileSync(path.join(root,'src','water-wave','video-worker.js'),'utf8');
   assert.match(video,/const PREFETCH = 4/);
   assert.match(video,/'-frames:v',String\(count\)/);
+});
+
+test('selection tools are dialogs and processing previews remain in the workspace', () => {
+  const html=fs.readFileSync(path.join(root,'src','water-wave','index.html'),'utf8');
+  const advanced=fs.readFileSync(path.join(root,'src','water-wave','advanced.js'),'utf8');
+  const layout=fs.readFileSync(path.join(root,'src','water-wave','layout.js'),'utf8');
+  assert.match(html,/<dialog id="selection-dialog"[\s\S]*<canvas id="canvas"[\s\S]*?<\/dialog>/);
+  assert.match(html,/<dialog id="export-dialog"/);
+  assert.match(html,/class="panel workspace"[\s\S]*id="result-panel"[\s\S]*id="focal-result"/);
+  assert.match(advanced,/createElement\('dialog'\);focusDialog\.id='focus-dialog'/);
+  assert.match(layout,/dialog\.showModal\(\)/);
+  assert.doesNotMatch(html,/<footer\b|class="intro"/);
 });
 
 const {sampleGeometry,resultFilename,progressTitle} = require('../src/water-wave/ui-utils.js');

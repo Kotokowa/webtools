@@ -19,7 +19,7 @@
     ${input('batch-repeats','重复次数',0)}<div class="three">${input('batch-start','起始序号',1)}${input('batch-end','结束序号',0)}${input('batch-stride','间隔',1)}</div>
     <button id="reference-directory">选择本地参考场文件目录</button><div class="directory-row" id="reference-root-row"><span id="reference-root-name"></span><button type="button" class="directory-clear" id="reference-root-clear" aria-label="解除参考场文件目录" title="解除关联" hidden>×</button></div>
     ${input('reference-format','无片实验格式','{run}_{depth}mm.avi','text')}${input('reference-static-format','无片静水格式','{run}_jt.tiff','text')}${input('reference-rms-format','无片 RMS 格式','{run}_{depth}mm_RMS.{ext}','text')}
-    <div class="mini-actions"><button id="batch-scan">识别</button><button id="batch-run">处理</button><button id="batch-continue" hidden>继续</button></div><div id="batch-list"></div><p id="repeat-notice" role="status" hidden></p>`;
+    <div class="mini-actions"><button id="batch-scan">识别</button><button id="batch-run" class="primary">处理</button><button id="batch-continue" hidden>继续</button></div><div id="batch-list"></div><p id="repeat-notice" role="status" hidden></p>`;
   document.querySelector('aside').append(batchPanel);
   const focalPanel=document.createElement('section');focalPanel.className='panel';
   focalPanel.innerHTML=`<h2>RMS 与聚焦</h2><div class="import-grid">
@@ -28,47 +28,58 @@
     <label class="file-button">无片静水图<input id="raw-reference-static" type="file" accept="image/*,.tif,.tiff"></label>
     <label class="file-button">无片图片／视频<input id="raw-reference-files" type="file" multiple accept="image/*,video/*,.tif,.tiff,.avi,.mkv"></label>
     <label class="file-button">无片文件夹<input id="raw-reference-folder" type="file" multiple webkitdirectory></label><button id="compute-reference">恢复无片参考</button></div>
-    <p id="reference-field-name"></p><label>工况<select id="focal-condition"></select></label>
-    <div class="focal-view"><img id="focal-image" alt="RMS"><div id="focal-overlay" aria-hidden="true"><i id="focal-ellipse"></i><i id="focal-line"></i></div><span id="focal-marker" hidden>＋</span></div>
-    <details id="focal-profile" class="option-group" hidden><summary>剖面</summary><img id="focal-profile-image" alt="水平 RMS 剖面与积分范围" style="width:100%"></details>
+    <p id="reference-field-name" class="help"></p><label>工况<select id="focal-condition"></select></label>`;
+  document.querySelector('aside').append(focalPanel);
+  const focusDialog=document.createElement('dialog');focusDialog.id='focus-dialog';focusDialog.setAttribute('aria-labelledby','focus-title');
+  focusDialog.innerHTML=`<div class="dialog-head"><h2 id="focus-title">选取焦点</h2><div class="mini-actions"><button data-dialog-close>关闭</button><button id="focus-save" class="primary">确认焦点</button></div></div><div class="dialog-body focus-editor">
+    <div class="focal-view"><img id="focal-image" alt="在 RMS 图上点选焦点，或在下方输入坐标"><div class="focal-overlay" aria-hidden="true" hidden><i class="focal-ellipse"></i><i class="focal-line"></i><span class="focal-marker">+</span></div></div>
     <div class="two">${input('focus-x','X / cm',0)}${input('focus-y','Y / cm',12.6)}${input('focus-half','搜索半宽 / cm',2.5)}${input('focus-line','线长 / cm',3)}${input('focus-axis-a','长全轴 / cm',9)}${input('focus-axis-b','短全轴 / cm',3)}</div>
     <label class="check"><input id="focus-fill" type="checkbox" checked>模型补齐</label>
     <label class="check"><input id="focus-auto-angle" type="checkbox" checked>拟合方向</label>${input('focus-angle','方向 / °',0)}
-    <div class="mini-actions"><button id="focus-save">保存焦点</button><button id="focus-analyze">分析</button><button id="focus-export">导出 RMS</button></div><pre id="focal-metrics"></pre>`;
-  document.querySelector('.workspace').append(focalPanel);
-  const offline=document.createElement('a');offline.textContent='下载离线版';offline.href='offline-download.html';document.querySelector('header nav').append(offline);
-  if(WATERWAVE_RUNTIME.offline){offline.remove();$('home-link').removeAttribute('href');$('home-link').hidden=true;const foot=document.querySelector('footer');foot.replaceChildren();const link=document.createElement('a');link.textContent='kotokowa · 在线版';link.href='https://kotokowa.github.io/webtools/water-wave/';link.target='_blank';link.rel='noopener';foot.append(link);}
+    </div>`;
+  document.body.append(focusDialog);
+  $('focal-result').querySelector('.focal-plots').insertAdjacentHTML('beforeend','<details id="focal-profile" class="option-group" hidden><summary>水平 RMS 剖面</summary><img id="focal-profile-image" alt="水平 RMS 剖面与积分范围"></details>');
+  $('focal-result').insertAdjacentHTML('beforeend','<div id="focal-summary" class="metrics" hidden></div><details id="full-metrics" class="option-group" hidden><summary>完整指标</summary><pre id="focal-metrics"></pre></details>');
+  $('other-actions').insertAdjacentHTML('beforeend','<div id="focus-actions" class="mini-actions" hidden><button id="focus-open" aria-haspopup="dialog" aria-controls="focus-dialog" disabled>选取焦点</button><button id="focus-analyze" class="primary" disabled>分析</button><button id="focus-export" disabled>导出 RMS</button></div>');
+  const offline=document.createElement('a');offline.id='offline-link';offline.textContent='离线版';offline.href='offline-download.html';document.querySelector('header nav').append(offline);
+  if(WATERWAVE_RUNTIME.offline){offline.remove();const link=$('home-link');link.textContent='在线版';link.href='https://kotokowa.github.io/webtools/water-wave/';link.target='_blank';link.rel='noopener';}
   const entries=[], centers=new Map();let root, referenceRoot, tasks=[], referenceTasks=[], current=null, commonReference=null, rawFiles=[], rawStatic=null, outputRoot=null, resumeRoot=null;
   const recordIds=['batch-variable','batch-amp','batch-unit','batch-format','static-format','batch-extensions','batch-repeats','batch-start','batch-end','batch-stride','reference-format','reference-static-format','reference-rms-format','focus-half','focus-line','focus-axis-a','focus-axis-b','focus-angle'];
   function advancedConfig(){const c={pipeline:$('pipeline').value,excitation_amplitude:readCoordinate($('batch-amp')),amplitude_unit:$('batch-unit').value};for(const id of Object.keys(numeric))c[id]=readCoordinate($(id));for(const id of Object.keys(booleans))c[id]=$(id).checked;return c;}
   function record(){return {settings:Object.fromEntries(recordIds.map(id=>[id,$(id).value])),centers:Object.fromEntries(centers),fill_model:$('focus-fill').checked,auto_angle:$('focus-auto-angle').checked};}
   function restoreRecord(r){for(const id of Object.keys(numeric))$(id).value=r.config?.[id]??numeric[id][0];for(const id of Object.keys(booleans))$(id).checked=r.config?.[id]??booleans[id][0];$('pipeline').value=r.config?.pipeline||'final3';for(const id of recordIds)if(r.advanced?.settings?.[id]!==undefined)$(id).value=r.advanced.settings[id];if(r.advanced?.centers)for(const [key,value] of Object.entries(r.advanced.centers))centers.set(key,value);if(r.advanced?.fill_model!==undefined)$('focus-fill').checked=r.advanced.fill_model;if(r.advanced?.auto_angle!==undefined)$('focus-auto-angle').checked=r.advanced.auto_angle;}
-  function addField(info,name,extra={}){globalThis.WaterWaveLayout?.fieldReady();if(info.field&&entries.some(e=>e.field===info.field))return;entries.push({...info,name,...extra});const opt=new Option(name,String(entries.length-1));$('focal-condition').add(opt);$('focal-condition').value=String(entries.length-1);showField(entries.length-1);}
+  function addField(info,name,extra={}){if(info.field&&entries.some(e=>e.field===info.field))return;entries.push({...info,name,...extra});const opt=new Option(name,String(entries.length-1));$('focal-condition').add(opt);$('focal-condition').value=String(entries.length-1);showField(entries.length-1);globalThis.WaterWaveLayout?.refreshControls();}
+  function paint(overlay,center,opts,angle){
+    overlay.hidden=!center;if(!center)return;
+    const [x,y]=center,xs=current.x_cm,ys=current.y_cm,sx=xs.at(-1)-xs[0],sy=ys.at(-1)-ys[0];
+    if(!sx||!sy)return;
+    const left=(x-xs[0])/sx*100+'%',top=(y-ys[0])/sy*100+'%';
+    const marker=overlay.querySelector('.focal-marker'),ellipse=overlay.querySelector('.focal-ellipse'),line=overlay.querySelector('.focal-line');
+    for(const item of [marker,ellipse,line]){item.style.left=left;item.style.top=top;}
+    ellipse.style.width=opts.axes_cm[0]/sx*100+'%';ellipse.style.height=opts.axes_cm[1]/sy*100+'%';ellipse.style.rotate=angle+'deg';
+    line.style.width=opts.line_length_cm/sx*100+'%';
+  }
   function mark(){
     if(!current)return;
     $('focal-profile').hidden=!current.profilePreview;
     if(current.profilePreview)$('focal-profile-image').src='data:image/png;base64,'+current.profilePreview;
-    const fit=current.fitMetrics,x=fit?.center_cm[0]??Number($('focus-x').value),y=fit?.center_cm[1]??Number($('focus-y').value),xs=current.x_cm,ys=current.y_cm;
-    const sx=xs.at(-1)-xs[0],sy=ys.at(-1)-ys[0],cx=(x-xs[0])/sx*100,cy=(y-ys[0])/sy*100;
-    const marker=$('focal-marker');marker.hidden=false;marker.style.left=cx+'%';marker.style.top=cy+'%';
-    const ellipse=$('focal-ellipse'),line=$('focal-line');
-    if(ellipse&&line){
-      const opts=fit?.options,ax=opts?.axes_cm[0]??Math.max(0,Number($('focus-axis-a').value)),by=opts?.axes_cm[1]??Math.max(0,Number($('focus-axis-b').value)),length=opts?.line_length_cm??Math.max(0,Number($('focus-line').value));
-      const angle=fit?(opts.theta_deg??fit.theta_rad*180/Math.PI):($('focus-auto-angle').checked?0:Number($('focus-angle').value)||0);
-      ellipse.style.left=cx+'%';ellipse.style.top=cy+'%';ellipse.style.width=(ax/sx*100)+'%';ellipse.style.height=(by/sy*100)+'%';ellipse.style.transform=`translate(-50%,-50%) rotate(${angle}deg)`;
-      line.style.left=cx+'%';line.style.top=cy+'%';line.style.width=(length/sx*100)+'%';line.style.transform='translate(-50%,-50%)';
-      ellipse.title='椭圆积分范围';line.title='水平线积分范围';
-    }
+    const fit=current.fitMetrics,value=id=>Math.max(0,Number($(id).value)||0);
+    const coordinates=[$('focus-x').value,$('focus-y').value],center=coordinates.every(v=>v.trim()&&Number.isFinite(Number(v)))?coordinates.map(Number):null;
+    paint($('focus-dialog').querySelector('.focal-overlay'),center,{axes_cm:[value('focus-axis-a'),value('focus-axis-b')],line_length_cm:value('focus-line')},$('focus-auto-angle').checked?0:Number($('focus-angle').value)||0);
+    paint($('focal-result').querySelector('.focal-overlay'),fit?.center_cm,fit?.options,fit?.options.theta_deg??(fit?fit.theta_rad*180/Math.PI:0));
+    $('full-metrics').hidden=!fit;$('focal-metrics').textContent=fit?JSON.stringify(fit,null,2):'';
+    globalThis.WaterWaveLayout?.showMetrics(fit);
   }
   function editFocus(){if(current){delete current.fitMetrics;delete current.profilePreview;}$('focal-profile').hidden=true;mark();}
-  function showField(index){current=entries[index];if(!current)return;$('focal-image').src='data:image/png;base64,'+current.preview;const center=centers.get(current.condition||current.name);$('focus-x').value=center?.[0]??((current.x_cm[0]+current.x_cm.at(-1))/2);$('focus-y').value=center?.[1]??Math.max(current.y_cm[0],Math.min(current.y_cm.at(-1),12.6));mark();if(!state.busy)catchAction(()=>recolor($('colormap').value))();}
+  function showFieldImage(preview){for(const id of ['focal-image','focal-result-image'])$(id).src='data:image/png;base64,'+preview;}
+  function showField(index){current=entries[index];if(!current)return;showFieldImage(current.preview);$('focal-result').hidden=false;$('focal-result-name').textContent=current.name;const center=centers.get(current.condition||current.name);$('focus-x').value=center?.[0]??((current.x_cm[0]+current.x_cm.at(-1))/2);$('focus-y').value=center?.[1]??Math.max(current.y_cm[0],Math.min(current.y_cm.at(-1),12.6));mark();if(!state.busy)catchAction(()=>recolor($('colormap').value))();}
   function saveCenter(){if(!current)throw Error('缺少 RMS');const c=[readCoordinate($('focus-x')),readCoordinate($('focus-y'))];if(c[0]<current.x_cm[0]||c[0]>current.x_cm.at(-1)||c[1]<current.y_cm[0]||c[1]>current.y_cm.at(-1))throw Error('焦点超出 RMS 场');centers.set(current.condition||current.name,c);return c;}
   $('focal-condition').onchange=()=>showField(Number($('focal-condition').value));
   $('focal-image').onclick=e=>{if(state.busy||!current)return;const r=e.target.getBoundingClientRect();$('focus-x').value=current.x_cm[0]+(e.clientX-r.left)/r.width*(current.x_cm.at(-1)-current.x_cm[0]);$('focus-y').value=current.y_cm[0]+(e.clientY-r.top)/r.height*(current.y_cm.at(-1)-current.y_cm[0]);saveCenter();editFocus();};
   for(const id of ['focus-x','focus-y','focus-half','focus-line','focus-axis-a','focus-axis-b','focus-angle']){$(id).oninput=editFocus;}
   for(const id of ['focus-x','focus-y'])$(id).onchange=catchAction(saveCenter);
   $('focus-auto-angle').onchange=editFocus;
-  $('focus-save').onclick=catchAction(()=>{saveCenter();mark();status('焦点已保存');});
+  $('focus-save').onclick=catchAction(()=>{saveCenter();mark();warning('');$('focus-dialog').close();status('焦点已保存。');});
   async function importRMS(file){return rpc({op:'field_import',data:await b64(file),name:file.name,colormap:$('colormap').value});}
   $('rms-file').onchange=catchAction(async e=>{const file=e.target.files[0];if(file)addField(await importRMS(file),file.name);});
   $('reference-rms-file').onchange=catchAction(async e=>{const file=e.target.files[0];if(file){const next=await importRMS(file);if(commonReference)await rpc({op:'field_dispose',field:commonReference});commonReference=next.field;$('reference-field-name').textContent=file.name;}});
@@ -196,7 +207,7 @@
     globalThis.WaterWaveLayout?.refreshExports();
   }
   async function runBatch(resume=false){
-    await identify();if(resume)await restoreResumeSelection();const options=settings(),limit=Number($('batch-repeats').value);const selected=WaterWaveBatch.selectRepeats(tasks,limit),refs=WaterWaveBatch.selectRepeats(referenceTasks,limit);
+    await identify();if(resume)await restoreResumeSelection();const options=settings(),limit=Number($('batch-repeats').value);if(globalThis.WaterWaveLayout?.requestSamples(options))return;const selected=WaterWaveBatch.selectRepeats(tasks,limit),refs=WaterWaveBatch.selectRepeats(referenceTasks,limit);
     const notices=[selected.notice,refs.notice].filter(Boolean);if(notices.length){const min=Math.min(...notices.map(n=>Number(n.match(/次数(\d+)次/)[1])));$('repeat-notice').textContent=`部分数据实际实验次数${min}次，小于设置次数${limit}次`;$('repeat-notice').hidden=false;setTimeout(()=>$('repeat-notice').hidden=true,15000);}
     if(resume&&resumeRoot)outputRoot=resumeRoot.handle;else{const resultDir=await root.getDirectoryHandle('results',{create:true});outputRoot=await uniqueDirectory(resultDir,new Date().toISOString().replace(/[:.]/g,'-'));await writeText(outputRoot,'selection.json',JSON.stringify({schema:'waterwave-selection-v2',image_size:[state.width,state.height],...options},null,2));}
     status(`${resume?'继续':'结果目录'}：${root.name}/results/${outputRoot.name} · 开始处理无波带片参考`);
@@ -235,8 +246,8 @@
   $('batch-continue').onclick=catchAction(async()=>{if(!resumeRoot)throw Error('没有可继续的结果');await restoreResumeSelection();await runBatch(true);});
   function gainSelection(){const selected=exportsSelected();return ['line','area'].filter(k=>selected.includes('focal_'+k)||selected.includes('focal'));}
   function focusOptions(){const o={half_width_cm:readCoordinate($('focus-half')),line_length_cm:readCoordinate($('focus-line')),axes_cm:[readCoordinate($('focus-axis-a')),readCoordinate($('focus-axis-b'))],fill_model:$('focus-fill').checked};if(!$('focus-auto-angle').checked)o.theta_deg=readCoordinate($('focus-angle'));return o;}
-  async function analyzeCurrent(){if(!current||!centers.has(current.condition||current.name))throw Error('请先选择焦点');const center=saveCenter(),entry=current,options=focusOptions();busy(true);state.stop=false;document.title='聚焦分析';let field,reference;try{field=await acquire(entry);reference=entry.reference?await acquire(entry.reference):commonReference;
-    if(state.stop)return;status(`聚焦分析 · 线长 ${options.line_length_cm} cm · 椭圆 ${options.axes_cm[0]} × ${options.axes_cm[1]} cm`);const result=await rpc({op:'field_analyze',field,center,options,reference,exports:exportsSelected(),colormap:$('colormap').value,gain_selection:gainSelection(),full_analysis:exportsSelected().includes('focal')});await saveArtifact(result,entry.name+'_focal_results.zip',entry.dir);$('focal-metrics').textContent=JSON.stringify(result.metrics,null,2);globalThis.WaterWaveLayout?.showMetrics(result.metrics);
+  async function analyzeCurrent(){if(!current)throw Error('请先导入 RMS');if(!centers.has(current.condition||current.name)){$('focus-open').click();warning('请先选取焦点。');return;}const center=saveCenter(),entry=current,options=focusOptions();busy(true);state.stop=false;document.title='聚焦分析';let field,reference;try{field=await acquire(entry);reference=entry.reference?await acquire(entry.reference):commonReference;
+    if(state.stop)return;status(`聚焦分析 · 线长 ${options.line_length_cm} cm · 椭圆 ${options.axes_cm[0]} × ${options.axes_cm[1]} cm`);const result=await rpc({op:'field_analyze',field,center,options,reference,exports:exportsSelected(),colormap:$('colormap').value,gain_selection:gainSelection(),full_analysis:exportsSelected().includes('focal')});await saveArtifact(result,entry.name+'_focal_results.zip',entry.dir);
     if(entry.dir){
       await writeText(entry.dir,'focal-summary.json',JSON.stringify({center,repeats:entry.runs?.length||1,average_field:result.metrics},null,2));
       await writeText(entry.dir,'focus.json',JSON.stringify({center,options}));
@@ -245,7 +256,6 @@
       flatten(result.metrics);await writeText(entry.dir,'focal-summary.csv',rows.join('\n'));
     }
     entry.fitMetrics=result.metrics;entry.profilePreview=result.profile_preview;
-    $('focal-profile').hidden=!result.profile_preview;if(result.profile_preview)$('focal-profile-image').src='data:image/png;base64,'+result.profile_preview;
     mark();status('聚焦分析完成');
   }finally{if(field)await release(entry,field);if(reference&&entry.reference)await release(entry.reference,reference);busy(false);document.title=idleTitle;}}
   $('focus-analyze').onclick=catchAction(analyzeCurrent);
@@ -253,7 +263,7 @@
   let colorRequest=0;
   async function recolor(colormap){
     const version=++colorRequest,entry=current;if(!entry)return;const field=await acquire(entry);
-    try{const info=await rpc({op:'field_info',field,colormap});if(version===colorRequest&&current===entry){entry.preview=info.preview;$('focal-image').src='data:image/png;base64,'+info.preview;}}
+    try{const info=await rpc({op:'field_info',field,colormap});if(version===colorRequest&&current===entry){entry.preview=info.preview;showFieldImage(info.preview);}}
     finally{await release(entry,field);}
   }
   globalThis.WaterWaveAdvanced={config:advancedConfig,record,restoreRecord,addField,recolor};
