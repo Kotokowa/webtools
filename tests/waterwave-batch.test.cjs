@@ -16,3 +16,10 @@ test('one deficiency notice uses minimum actual count; ambiguous references are 
  const r=selectRepeats(groups,3);assert.equal(r.selected.length,6);assert.equal(r.notice,'部分数据实际实验次数1次，小于设置次数3次');
  const ambiguous=group(['1_20mm.avi','1_jt.tif','1_jt.tiff'].map(path=>({path})),'{run}_{depth}mm.avi','{run}_jt.{ext}');assert.equal(ambiguous[0].errors[0],'静水参考匹配不唯一');
 });
+test('batch preflight can resolve ambiguous static references without crossing experiment IDs',()=>{
+ const paths=['001_30mm_short.avi','001_jt.tif','001_jt.tiff','002_jt.tiff'].map(path=>({path}));
+ const parse=staticOverrides=>group(paths,'{run}_{depth}mm_short.avi','{run}_jt.{ext}',{staticOverrides})[0];
+ const unresolved=parse();assert.equal(unresolved.referenceChoices.length,2);assert.equal(unresolved.reference,null);
+ const picked=parse(new Map([[unresolved.key,'001_jt.tiff']]));assert.equal(picked.reference.path,'001_jt.tiff');assert.deepEqual(picked.errors,[]);
+ const otherRun=parse(new Map([[unresolved.key,'002_jt.tiff']]));assert.equal(otherRun.reference,null);assert.equal(otherRun.errors[0],'静水参考匹配不唯一');
+});

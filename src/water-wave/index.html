@@ -5,10 +5,10 @@
 <meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer">
 <title>水波场恢复 · Water Wave Lab</title>
 <meta name="description" content="用参考棋盘格照片恢复水面高度，导出高度场、剖面和时间序列。Python FCD 在本机或浏览器运行。">
-<link rel="stylesheet" href="workbench.css">
+<link rel="stylesheet" href="workbench.css"><link rel="stylesheet" href="topbar.css">
 </head>
 <body>
-<header><div class="brand"><h1>水波场恢复</h1><span id="engine" class="badge">检测运行环境…</span></div><nav aria-label="工具链接"><button id="demo" class="link-button">示例</button><a id="home-link" href="../">小工具</a><a id="guide-link" href="guide.html" target="_blank" rel="noopener">教程</a><a id="accelerator-link" href="guide.html#acceleration" target="_blank" rel="noopener">本机加速</a><a href="https://github.com/Kotokowa/webtools" target="_blank" rel="noopener noreferrer">源码</a></nav></header>
+<header class="topbar"><div class="topbar-brand"><h1 class="topbar-title">水波场恢复</h1><span id="engine" class="badge">检测运行环境…</span></div><nav aria-label="工具链接"><a id="home-link" class="tools-home" href="../">小工具主页</a><button id="demo" class="link-button">示例</button><a id="guide-link" href="guide.html" target="_blank" rel="noopener">教程</a><a id="accelerator-link" href="native-accelerator.zip" download>GPU加速器下载</a><a href="https://github.com/Kotokowa/webtools" target="_blank" rel="noopener noreferrer">源码↗</a></nav></header>
 <main id="workbench" data-task="images">
 <div class="workbench-tools"><nav class="task-nav" aria-label="处理方式"></nav><div class="tool-actions"><button id="selection-open" aria-haspopup="dialog" aria-controls="selection-dialog" disabled>范围与采样</button><button id="export-open" aria-haspopup="dialog" aria-controls="export-dialog">导出设置</button></div></div>
 <div class="layout">
@@ -42,10 +42,10 @@
 <section class="panel workspace" aria-label="处理结果">
 <div id="result-empty">暂无恢复结果</div>
 <section id="result-panel" hidden><div class="section-head"><h2>恢复预览 <small id="result-frame"></small></h2></div><div class="result-layout"><img id="result" alt="恢复高度场预览"><div class="color-legend"><span id="max-label">+1 mm</span><div></div><span id="min-label">−1 mm</span></div></div></section>
-<section id="focal-result" hidden><div class="section-head"><h2>RMS 场 <small id="focal-result-name"></small></h2></div><div class="focal-plots"><div class="focal-view"><img id="focal-result-image" alt="当前 RMS 场"><div class="focal-overlay" aria-hidden="true" hidden><i class="focal-ellipse"></i><i class="focal-line"></i><span class="focal-marker">+</span></div></div></div></section>
+<section id="focal-result" hidden><div class="section-head"><h2>RMS 场 <small id="focal-result-name"></small></h2></div><div class="focal-plots"><div class="focal-view"><img id="focal-result-image" alt="当前 RMS 场"><div class="focal-overlay" aria-hidden="true" hidden><i class="focal-ellipse"></i><i class="focal-fwhm"></i><i class="focal-line"></i><span class="focal-marker">+</span></div></div></div></section>
 </section>
 </div>
-<section class="panel run-panel"><div class="run-row"><div id="single-actions" class="mini-actions"><button id="run" class="primary" disabled>开始恢复</button></div><div id="other-actions" class="mini-actions"></div><button id="stop" title="保留已完成帧" disabled>停止</button><a id="download" class="download" hidden download="water-wave-results.zip">下载结果 ZIP</a><p id="status" role="status" aria-live="polite">请选择影像。</p></div><progress id="progress" value="0" max="1" aria-label="处理进度"></progress><div id="metrics" class="metrics"></div><p id="warnings" class="warning" hidden></p></section>
+<section class="panel run-panel"><div class="run-row"><div id="single-actions" class="mini-actions"><button id="run" class="primary" disabled>开始恢复</button><button id="extract-frames" hidden disabled>提取 TIFF</button></div><div id="other-actions" class="mini-actions"></div><button id="stop" title="保留已完成帧" disabled>停止</button><a id="download" class="download" hidden download="water-wave-results.zip">下载结果 ZIP</a><p id="status" role="status" aria-live="polite">请选择影像。</p></div><progress id="progress" value="0" max="1" aria-label="处理进度"></progress><div id="metrics" class="metrics"></div><p id="warnings" class="warning" hidden></p></section>
 </main>
 <dialog id="selection-dialog" class="viewer-panel" aria-labelledby="selection-title"><div class="dialog-head"><h2 id="selection-title">范围与采样</h2><div class="mini-actions"><button id="load-record">导入记录</button><button id="save-record">导出记录</button><input id="record-file" hidden type="file" accept=".json,application/json"><button class="primary" data-dialog-close>完成</button></div></div><div class="dialog-body">
 <div class="toolbar" role="group" aria-label="绘制工具"><button data-mode="roi" class="selected">框选范围</button><button data-mode="line">自由线</button><button data-mode="hline">水平线</button><button data-mode="vline">竖直线</button><button data-mode="point">采样点</button><span class="spacer"></span><button id="undo">撤销采样</button><button id="clear-geometry">清空线点</button></div>
@@ -65,6 +65,7 @@
 <label class="export-item"><input type="checkbox" data-export="height_npz" checked><span><b>高度数值场</b><small>NPZ · mm + 坐标</small></span></label>
 <label class="export-item"><input type="checkbox" data-export="height_png" checked><span><b>高度场图片</b><small>PNG · 全程固定色标</small></span></label>
 <label class="export-item"><input type="checkbox" data-export="height_csv"><span><b>高度矩阵 CSV</b><small>完整像素矩阵 · 较大</small></span></label>
+<label class="export-item"><input type="checkbox" data-export="height_mat"><span><b>高度场 MAT</b><small>单帧 H / 多帧 H_stack</small></span></label>
 <label class="export-item"><input type="checkbox" data-export="raw_npz"><span><b>去趋势前高度</b><small>便于检查背景扣除</small></span></label>
 <label class="export-item"><input type="checkbox" data-export="lines"><span><b>剖面线数据</b><small>每条线跨帧 CSV</small></span></label>
 <label class="export-item"><input type="checkbox" data-export="points"><span><b>固定点时间序列</b><small>原始帧号与时间</small></span></label>

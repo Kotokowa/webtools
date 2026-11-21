@@ -33,7 +33,9 @@
     for(const g of groups.values()){
       g.entries.sort((a,b)=>(a.values.frame??0)-(b.values.frame??0));
       const matches=statics.filter(s=>reference.keys.every(k=>k==='ext'||k==='frame'||s.values[k]===g.values[k]));
-      if(matches.length!==1)g.errors.push(matches.length?'静水参考匹配不唯一':'缺少静水参考');else g.reference=matches[0];
+      g.referenceChoices=matches;
+      g.reference=matches.find(item=>item.path===options.staticOverrides?.get(g.key))??(matches.length===1?matches[0]:null);
+      if(!g.reference)g.errors.push(matches.length?'静水参考匹配不唯一':'缺少静水参考');
       if(!dynamic.keys.includes('frame')&&g.entries.length!==1)g.errors.push('实验编号重复');
       if(dynamic.keys.includes('frame')&&g.entries.some((e,i)=>i&&e.values.frame===g.entries[i-1].values.frame))g.errors.push('帧号重复');
       g.sequence=dynamic.keys.includes('frame');

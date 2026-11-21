@@ -1,0 +1,6 @@
+.topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 16px; row-gap: 4px; padding: 6px 14px; border-bottom: 1px solid #d5dee5; background: #fff; color: #243746; font: 13px/1.45 system-ui,"Microsoft YaHei",sans-serif; }
+.topbar nav, .topbar-brand { display: flex; align-items: center; flex-wrap: wrap; gap: 11px; }
+.topbar nav a { color: #176b98; text-decoration: none; }
+.topbar nav a:hover { text-decoration: underline; }
+.topbar nav .tools-home { color: #171717; font-weight: 700; }
+.topbar-title { margin: 0; font-size: 16px; font-weight: 650; }

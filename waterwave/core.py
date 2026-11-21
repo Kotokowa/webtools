@@ -35,6 +35,7 @@ class Config:
     pipeline: str = "final3"
     height_scale: float = 1.0
     masking: bool = True
+    bridge_occlusions: bool = True
     mask_dark: float = .25
     mask_mod: float = .30
     mask_saturation: float = 1.01
@@ -54,6 +55,10 @@ class Config:
     rms_min_fraction: float = .8
     lockin: bool = False
     frequency_hz: float = 6.0
+    gravity_m_s2: float = 9.796
+    density_kg_m3: float = 998.
+    surface_tension_n_m: float = .072
+    ak_linear_limit: float = .15
     excitation_amplitude: float = 0.0
     amplitude_unit: str = 'mm'
 
@@ -69,6 +74,8 @@ class Config:
             raise ValueError("激励振幅或单位无效")
         if min(self.height_scale, self.cal_x_slope, self.cal_y_slope) <= 0:
             raise ValueError("标定系数须大于 0")
+        if min(self.gravity_m_s2, self.density_kg_m3, self.ak_linear_limit) <= 0 or self.surface_tension_n_m < 0:
+            raise ValueError('色散关系参数无效')
         for key in ("mask_window", "mask_min_blob", "mask_grow", "mask_guard", "fill_ring"):
             value = getattr(self, key)
             if value < 0 or value != int(value):
@@ -332,7 +339,8 @@ class Reconstructor:
         if self.config.pipeline == "legacy":
             u, v, valid = u[cut], v[cut], valid[cut]
         else:
-            u, v = self.bridge.apply(u, holes), self.bridge.apply(v, holes)
+            if self.config.bridge_occlusions:
+                u, v = self.bridge.apply(u, holes), self.bridge.apply(v, holes)
             if self.config.displacement_calibration:
                 u = (u-10*self.config.cal_x_offset_cm/self.scale)/self.config.cal_x_slope
                 v = (v-10*self.config.cal_y_offset_cm/self.scale)/self.config.cal_y_slope

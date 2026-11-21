@@ -16,8 +16,9 @@ import uuid
 import webbrowser
 import numpy as np
 from scipy import fft
-from .session import dispatch, image_preview, sessions
-from .fields import fields, artifacts
+from PIL import Image
+from .session import dispatch, image_preview, sessions, clips
+from .fields import fields, artifacts, import_field
 from .acceleration import fft_backend, INFO as ACCELERATOR_INFO
 from .gpu import make_demodulator, INFO as GPU_INFO
 
@@ -55,6 +56,8 @@ def cleanup():
     calculator.shutdown(wait=True)
     for s in list(sessions.values()):
         s.dispose()
+    for clip in list(clips.values()):
+        clip.dispose()
     for mapping in (fields, artifacts):
         for path in mapping.values(): path.unlink(missing_ok=True)
         mapping.clear()
@@ -70,6 +73,10 @@ def calculate(m):
             a = read_video_frame(m['video'], m['index'])
             s = sessions[m['session']]
             return s.process(a, m['name'], m['index']+1, m['index']/videos[m['video']]['fps'], m.get('preview', True))
+        if m.get('op') == 'video_extract_frame':
+            frame = read_video_frame(m['video'], m['index'])
+            clips[m['clip']].append(m['index'], Image.fromarray(frame))
+            return dict(ok=True)
         if m.get('op') == 'release_video':
             entry = videos.pop(m['video'], None)
             if entry:
@@ -125,7 +132,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json_response({"error": "仅允许本机访问"}, 403)
         parsed = urlparse(self.path)
         if parsed.path == "/api/info":
-            return self.json_response({"mode": "local", "protocol": 2, "version": "2.2.0", "acceleration": ACCELERATOR_INFO})
+            return self.json_response({"mode": "local", "protocol": 2, "version": "2.2.0", "acceleration": ACCELERATOR_INFO,
+                                       "features": ["field_upload", "batch_focus", "frame_tiff", "batch_imported_rms"]})
         if parsed.path == "/api/download":
             key = parse_qs(parsed.query).get("session", [""])[0]
             s = sessions.get(key)
@@ -153,6 +161,30 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json_response({"error": "仅允许本机同源请求"}, 403)
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            parsed = urlparse(self.path)
+            if parsed.path == "/api/field":
+                if not 0 < length <= 1024**3:
+                    raise ValueError("RMS 文件为空或超过本地版 1 GiB 导入限制")
+                if self.headers.get("Content-Type", "") != "application/octet-stream":
+                    return self.json_response({"error": "需要二进制 RMS 文件"}, 415)
+                params = parse_qs(parsed.query)
+                name = params.get("name", [""])[0][:255]
+                if not name.lower().endswith(('.npz', '.mat')):
+                    raise ValueError("RMS 文件须为 NPZ 或 MAT")
+                colormap = params.get("colormap", [None])[0]
+                with tempfile.NamedTemporaryFile(delete=False, prefix="waterwave-upload-", dir=os.environ.get("WATERWAVE_TMP")) as target:
+                    path = Path(target.name)
+                try:
+                    with path.open('wb') as target:
+                        while length:
+                            chunk = self.rfile.read(min(1024**2, length))
+                            if not chunk: raise ValueError("RMS 上传中断")
+                            target.write(chunk)
+                            length -= len(chunk)
+                    result = calculator.submit(import_field, path, name, colormap).result()
+                finally:
+                    path.unlink(missing_ok=True)
+                return self.json_response(result)
             if self.path == "/api/video":
                 if not 0 < length <= 16*1024**3:
                     raise ValueError("视频为空或超过本地版 16 GiB 导入限制")

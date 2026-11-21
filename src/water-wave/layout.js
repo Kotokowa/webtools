@@ -16,7 +16,7 @@
   const sourceFold=module(source,'影像来源','source-options');
   module(physical,'物理标定','physical-options');
   const recoveryBody=recovery.querySelector('.two');
-  for(const [title,keys] of [['遮挡参数',['mask_dark','mask_mod','mask_saturation','mask_window','mask_min_blob','mask_grow','mask_guard','fill_ring']],['经验标定',['height_scale','cal_x_slope','cal_y_slope','cal_x_offset_cm','cal_y_offset_cm','cal_slope_error','cal_offset_error_cm']]]) {
+  for(const [title,keys] of [['遮挡参数',['bridge_occlusions','mask_dark','mask_mod','mask_saturation','mask_window','mask_min_blob','mask_grow','mask_guard','fill_ring']],['经验标定',['height_scale','cal_x_slope','cal_y_slope','cal_x_offset_cm','cal_y_offset_cm','cal_slope_error','cal_offset_error_cm']],['色散与波陡',['gravity_m_s2','density_kg_m3','surface_tension_n_m','ak_linear_limit']]]) {
     const grid=document.createElement('div');grid.className='two';for(const key of keys)grid.append($(key).closest('label'));
     recovery.append(group(title,[grid]));
   }
@@ -40,11 +40,11 @@
   const focusGrid=$('focus-x').parentElement.parentElement;
   const focusExtra=document.createElement('div');focusExtra.className='two';
   for(const id of ['focus-half','focus-line','focus-axis-a','focus-axis-b'])focusExtra.append($(id).closest('label'));
-  const focusDetails=group('分析参数',[focusExtra,$('focus-fill').closest('label'),$('focus-auto-angle').closest('label'),$('focus-angle').closest('label')],'focus-options');
+  const focusDetails=group('分析参数',[focusExtra,$('focus-fwhm').closest('label'),$('focus-fill').closest('label'),$('focus-auto-angle').closest('label'),$('focus-angle').closest('label'),$('focus-method'),$('focus-design')],'focus-options');
   focusGrid.after(focusDetails);
   const focusFold=module(focus,'RMS 来源','focal-module');
   focusFold.open=true;
-  const dialogs=[['selection-open','selection-dialog'],['export-open','export-dialog'],['focus-open','focus-dialog']];
+  const dialogs=[['selection-open','selection-dialog'],['export-open','export-dialog'],['focus-open','focus-dialog'],['focus-batch-open','focus-batch-dialog']];
   for(const [button,id] of dialogs){
     const dialog=$(id),notice=document.createElement('p');notice.className='dialog-warning warning';notice.hidden=true;notice.setAttribute('role','alert');dialog.querySelector('.dialog-body').prepend(notice);
     $(button).onclick=()=>{if(dialog.open)return;notice.hidden=true;dialog.showModal();if(id==='selection-dialog')draw();};
@@ -84,6 +84,7 @@
     moreExports.querySelector('summary').textContent='更多导出'+(count?'（已选 '+count+'）':'');
   }
   function refreshControls(){
+    refreshRun();
     $('selection-open').disabled=state.busy||!state.image;
     for(const id of ['focus-open','focus-analyze','focus-export'])$(id).disabled=state.busy||!$('focal-condition').options.length;
   }
@@ -110,7 +111,15 @@
   globalThis.WaterWaveLayout={
     recolor,refreshControls,requestSamples,
     refreshExports(){refreshExports();legend();},
-    showMetrics(metrics){const summary=$('focal-summary');summary.replaceChildren();for(const [key,title] of [['line_gain','线聚焦效率'],['area_gain','面聚焦效率']])if(key in (metrics?.fit_gain||{})){const item=document.createElement('div');item.textContent=title;const value=document.createElement('b');value.textContent=metrics.fit_gain[key]===null?'—':Number(metrics.fit_gain[key]).toPrecision(4);item.append(value);summary.append(item);}summary.hidden=!summary.childElementCount;}
+    showMetrics(metrics){
+      const summary=$('focal-summary');summary.replaceChildren();
+      const formatted=value=>Number.isFinite(value)?value.toPrecision(4):'—';
+      const append=(title,text,hint)=>{const item=document.createElement('div'),value=document.createElement('b');item.textContent=title;value.textContent=text;if(hint)item.title=hint;item.append(value);summary.append(item);};
+      for(const [key,title] of [['line_gain','线增益'],['area_gain','面增益 · 固定轴长'],['fwhm_area_gain','面增益 · 半高宽']])if(key in (metrics?.fit_gain||{}))append(title,formatted(metrics.fit_gain[key]));
+      if(metrics){const sources={measured:'实测',model:'模型估算',unavailable:'未找到半高交点'};
+        append('半高宽 X × Y',[metrics.fit_x_fwhm_cm,metrics.fit_y_fwhm_cm].map(formatted).join(' × ')+' cm',`X：${sources[metrics.fit_x_fwhm_source]||'—'}；Y：${sources[metrics.fit_y_fwhm_source]||'—'}`);}
+      summary.hidden=!summary.childElementCount;
+    }
   };
   selectTask('images');
   refreshExports();legend();

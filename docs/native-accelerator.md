@@ -1,4 +1,4 @@
-# Water Wave Lab 本机加速器
+# Water Wave Lab GPU 加速器
 
 作者：kotokowa。在线工具：https://kotokowa.github.io/webtools/water-wave/
 
@@ -18,4 +18,4 @@ Windows：完整解压后双击 `launch-water-wave.bat`。macOS / Linux：在解
 
 本机引擎使用 FFTW 加速傅里叶变换、zlib-ng 压缩结果，并顺序复用视频解码器。在 Windows 上仅为当前计算进程请求高性能调度，不修改系统电源计划。恢复公式、空间分辨率和逐帧 RMS 累积保持不变；实际速度取决于电脑和数据。运行信息随结果保存。
 
-启动器检测到 NVIDIA 驱动 580 或更高版本时，会尝试安装可选的 CuPy、CUDA 13 运行库和 FFT 组件，首次额外下载约 370 MB；不安装或修改显卡驱动。支持的 GPU 用双精度执行载波解调和相位解包裹，其余步骤仍在 CPU 完成。没有兼容显卡、依赖安装失败或运行时显存不足，会使用 CPU。小于 512×512 像素的任务也直接用 CPU。排查显卡问题时可设置环境变量 WATERWAVE_DISABLE_GPU=1 后启动。
+GPU 路径面向 Windows／Linux x64、NVIDIA Turing 或之后的架构（CUDA 计算能力 ≥ 7.5）和支持 CUDA 13.0 的 R580 或更新驱动。启动器检查 `nvidia-smi` 后尝试安装 CuPy、CUDA 13 运行库和 FFT 组件，首次额外下载约 370 MB；不修改显卡驱动。支持的 GPU 用双精度执行载波解调和相位解包裹，其余步骤仍在 CPU 完成。没有兼容显卡、依赖安装失败或运行时显存不足，会使用 CPU。小于 512×512 像素的任务也直接用 CPU。排查显卡问题时可设置环境变量 WATERWAVE_DISABLE_GPU=1 后启动。

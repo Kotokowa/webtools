@@ -16,17 +16,18 @@ import zipfile
 import numpy as np
 import scipy
 import PIL
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageOps, features
 from scipy import signal
+from scipy.io import savemat
 from .core import Config, Reconstructor, sample_geometry, synthetic_frame
 from . import __version__
 from .measurement import RMSAccumulator
 from .analysis import clean
 from .colors import color_rgb
-from .fields import save_field, describe, write_field_exports, dispatch_field, artifact, save_npz
+from .fields import save_field, describe, write_field_exports, dispatch_field, artifact, save_npz, new_path
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
-EXPORTS = {"height_npz", "raw_npz", "height_csv", "height_png", "displacement", "quality", "lines", "points", "temporal", "spectrum", "wavelength", "video"}
+EXPORTS = {"height_npz", "height_mat", "raw_npz", "height_csv", "height_png", "displacement", "quality", "lines", "points", "temporal", "spectrum", "wavelength", "video"}
 EXPORTS |= {"rms_npz", "rms_mat", "rms_png", "rms_csv", "focal", "focal_line", "focal_area"}
 
 
@@ -123,6 +124,7 @@ class Session:
         self.direct_files_mode = bool(settings.get("direct_files", False))
         self.direct_files = []
         self.frames, self.heights, self.point_signals, self.video_paths = [], [], [], []
+        self.mat_frames = []
         self.tables = {}
         self.closed = False
         self.finished = False
@@ -169,6 +171,8 @@ class Session:
         pixels = int(np.prod(self.recon.metadata["output_shape"]))
         if "temporal" in self.exports and (len(self.heights)+1)*pixels*4*6 > self.recon.config.temporal_limit_mb*1024**2:
             raise ValueError("时域分析预计超出内存限额；减小选区/帧数或取消振幅相位导出。已完成帧可保留下载")
+        if "height_mat" in self.exports and (len(self.frames)+1)*pixels*8 > min(self.recon.config.temporal_limit_mb*1024**2, 2**31-1024):
+            raise ValueError("高度 MAT 栈超过内存预算或 MATLAB v7 变量上限；请减小选区/帧数，或改用逐帧 NPZ")
         result = self.recon.restore(image)
         restored = time.perf_counter()
         h = result["height_mm"]
@@ -213,6 +217,10 @@ class Session:
             self.array_file(f"height/{tag}.npz", height_mm=h, x_mm=x_axis,
                             y_mm=y_axis, origin_px=origin,
                             frame_id=frame_id, time_s=np.nan if time_s is None else time_s)
+        if "height_mat" in self.exports:
+            mat_frame = self.directory / (tag+'.npy')
+            np.save(mat_frame, h, allow_pickle=False)
+            self.mat_frames.append(mat_frame)
         if "raw_npz" in self.exports:
             self.array_file(f"before_detrend/{tag}.npz", height_mm=result["raw_height_mm"])
         if "height_csv" in self.exports:
@@ -318,6 +326,29 @@ class Session:
                 result.update(self.rms_preview())
         return result
 
+    def write_height_mat(self, times):
+        x_axis, y_axis = self.recon.coordinates()
+        x, y = np.meshgrid(x_axis/10, y_axis/10)
+        variables = dict(X_cm=x, Y_cm=y, mm_per_pixel=self.recon.scale,
+                         cm_per_pixel=self.recon.scale/10, H_param=self.recon.H,
+                         frame_ids=np.array([frame['frame_id'] for frame in self.frames]),
+                         time_s=np.array([stamp if stamp is not None else np.nan for stamp in times]))
+        if len(self.mat_frames) == 1:
+            name = 'H_single.mat'
+            variables['H'] = np.load(self.mat_frames[0], allow_pickle=False)
+        else:
+            name = 'H_all.mat'
+            stack = np.empty((*x.shape, len(self.mat_frames)), dtype=np.float64, order='F')
+            for index, frame in enumerate(self.mat_frames):
+                stack[:, :, index] = np.load(frame, allow_pickle=False)
+            variables['H_stack'] = stack
+        path = self.directory / name
+        savemat(path, variables, do_compression=False)
+        self.zip.write(path, name)
+        path.unlink()
+        for frame in self.mat_frames: frame.unlink()
+        self.mat_frames.clear()
+
     def finish(self, partial=False):
         if self.finished:
             return self.path
@@ -327,6 +358,8 @@ class Session:
             raise ValueError("还没有成功处理的帧")
         temporal_note = None
         times = [f["time_s"] for f in self.frames]
+        if self.mat_frames:
+            self.write_height_mat(times)
         uniform = len(times) >= 3 and all(t is not None for t in times)
         if uniform:
             delta = np.diff(times)
@@ -403,7 +436,7 @@ class Session:
         rms.update(X_cm=x/10, Y_cm=y/10, source=self.frames[0]['source_name'],
                    config_json=json.dumps(self.recon.metadata['config']))
         self.field_key = save_field(rms)
-        write_field_exports(self.zip, rms, self.exports)
+        write_field_exports(self.zip, rms, self.exports-({'rms_npz'} if self.direct_files_mode else set()))
         manifest = {"schema": "waterwave-results-v2", "version": __version__, **self.recon.metadata,
                     "runtime": {"platform": sys.platform, "python": sys.version,
                                 "numpy": np.__version__, "scipy": scipy.__version__, "pillow": PIL.__version__,
@@ -428,12 +461,60 @@ class Session:
 
 
 sessions = {}
+clips = {}
+
+
+class FrameArchive:
+    def __init__(self, name, fps):
+        if not np.isfinite(fps) or fps <= 0:
+            raise ValueError('视频帧率无效')
+        self.name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '_', name).strip('. ')[:140] or 'video'
+        self.fps = fps
+        self.path = new_path('.zip')
+        self.zip = zipfile.ZipFile(self.path, 'w', zipfile.ZIP_STORED)
+        self.indices = []
+
+    def append(self, index, image):
+        if not isinstance(index, int) or index < 0 or (self.indices and index <= self.indices[-1]):
+            raise ValueError('原始帧号须递增')
+        buffer = io.BytesIO()
+        image.save(buffer, 'TIFF', compression='tiff_deflate' if features.check('libtiff') else 'raw')
+        self.zip.writestr(f'{self.name}_frame_{index+1:04d}.tiff', buffer.getvalue())
+        self.indices.append(index)
+
+    def finish(self, partial):
+        self.zip.writestr('frames.json', json.dumps(dict(source=self.name, fps=self.fps, partial=partial,
+            frame_ids=[index+1 for index in self.indices], times_s=[index/self.fps for index in self.indices])))
+        self.zip.close()
+        result = artifact(self.path)
+        self.path = None
+        return result
+
+    def dispose(self):
+        self.zip.close()
+        if self.path is not None:
+            self.path.unlink(missing_ok=True)
 
 
 def dispatch(message):
     op = message.get("op")
     if op.startswith('field_') or op.startswith('artifact_'):
         return dispatch_field(message)
+    if op == 'clip_begin':
+        key = uuid.uuid4().hex
+        clips[key] = FrameArchive(str(message['name']), float(message['fps']))
+        return dict(clip=key)
+    if op == 'clip_frame':
+        data = base64.b64decode(message['data'], validate=True)
+        with Image.open(io.BytesIO(data)) as image:
+            clips[message['clip']].append(message['index'], image.convert('RGB'))
+        return dict(ok=True)
+    if op == 'clip_finish':
+        return clips[message['clip']].finish(bool(message.get('partial', False)))
+    if op == 'clip_dispose':
+        clip = clips.pop(message['clip'], None)
+        if clip is not None: clip.dispose()
+        return dict(ok=True)
     if op == "inspect":
         a = decode_image(base64.b64decode(message["data"], validate=True))
         return {"width": a.shape[1], "height": a.shape[0], "preview": image_preview(a)}

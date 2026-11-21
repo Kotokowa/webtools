@@ -32,7 +32,7 @@ async function prepare(out,codec){
   fs.writeFileSync(path.join(out,'README.txt'),'Water Wave Lab — kotokowa\nhttps://kotokowa.github.io/webtools/water-wave/\n\nExtract the entire archive. Run waterwave.exe (Windows), start.command (macOS), or waterwave (Linux). Use a current Chrome or Edge for writable directories. No Python installation or internet connection is required. Close the launcher terminal to stop its loopback-only server.\nUnsigned application warnings may be shown by the operating system.\nMIT permits copying, modification, redistribution and commercial use with the copyright and license retained. Dependency licenses also apply.\nprovenance.json and provenance.sig identify an official build. The public key is also published on the online site. Local verification is not DRM and does not prohibit modification.\n');
   fs.writeFileSync(path.join(out,'dependency-manifest.json'),JSON.stringify({pyodide:lock.info,packages:lock.packages,ffmpeg:'LGPL n5.1.4; see licenses/ffmpeg'},null,2));
 }
-async function pack(common,out,os,arch){
+async function pack(common,out,os,arch,variant){
   fs.cpSync(common,out,{recursive:true});
   const key=crypto.createPrivateKey(process.env.WATERWAVE_SIGNING_KEY||fs.readFileSync(process.env.WATERWAVE_SIGNING_KEY_FILE));
   const pub=crypto.createPublicKey(key).export({format:'der',type:'spki'}).subarray(-32).toString('base64');
@@ -41,9 +41,14 @@ async function pack(common,out,os,arch){
   cp.execFileSync('go',['build','-trimpath','-ldflags','-s -w -X main.publicKey='+pub,'-o',path.join(out,exe),path.join(root,'offline/main.go')],{env:{...process.env,GOOS:os,GOARCH:arch,CGO_ENABLED:'0'},stdio:'inherit'});
   if(os==='darwin'){fs.writeFileSync(path.join(out,'start.command'),'#!/bin/sh\ncd "$(dirname "$0")"\nexec ./waterwave\n');fs.chmodSync(path.join(out,'start.command'),0o755);}
   if(os!=='windows')fs.chmodSync(path.join(out,exe),0o755);
+  if(variant==='gpu'){
+    if(arch!=='amd64'||!['windows','linux'].includes(os))throw Error('The GPU bundle targets Windows/Linux x64');
+    cp.execFileSync('python',[path.join(root,'scripts/native-bundle.py'),'--directory',path.join(out,'GPU-accelerator')],{stdio:'inherit'});
+    fs.appendFileSync(path.join(out,'README.txt'),'\nGPU bundle: the standard offline launcher is still included. For NVIDIA acceleration, first read GPU-accelerator/README.md and use the accelerator launcher in that folder (Python 3.11+ and first-run internet access required).\n');
+  }
   fs.writeFileSync(path.join(out,'publisher-public-key.txt'),pub+'\n');
   const files=Object.fromEntries(walk(out).filter(f=>!['provenance.json','provenance.sig'].includes(f)).sort().map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join(out,name))).digest('hex')]));
-  const manifest=Buffer.from(JSON.stringify({author:'kotokowa',website:'https://kotokowa.github.io/webtools/water-wave/',version:process.env.RELEASE_TAG||'development',platform:os+'-'+arch,files},null,2));
+  const manifest=Buffer.from(JSON.stringify({author:'kotokowa',website:'https://kotokowa.github.io/webtools/water-wave/',version:process.env.RELEASE_TAG||'development',platform:os+'-'+arch,variant:variant||'standard',files},null,2));
   fs.writeFileSync(path.join(out,'provenance.json'),manifest);fs.writeFileSync(path.join(out,'provenance.sig'),crypto.sign(null,manifest,key).toString('base64'));
 }
 if(require.main===module){const [mode,...args]=process.argv.slice(2);(mode==='prepare'?prepare(...args):mode==='pack'?pack(...args):Promise.reject(Error('Use prepare or pack'))).catch(e=>{console.error(e.message);process.exitCode=1;});}

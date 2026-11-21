@@ -7,7 +7,7 @@ const state = {local: false, nativeBase: '', backend: null, ready: false, busy: 
   drag: null, view: null, video: null, session: null, downloadUrl: null, referenceGeneration: 0};
 const imagePattern = /\.(png|jpe?g|tiff?|bmp|webp)$/i;
 const videoPattern = /\.(mp4|avi|mov|mkv|webm|m4v)$/i;
-const refPattern = /^(jt|ref|reference|static|静态|静水|基准)([_.\-\d ]|$)/i;
+const refPattern = /^(?:\d+[_.-])?(jt|ref|reference|static|静态|静水|基准)([_.\-\d ]|$)/i;
 const collator = new Intl.Collator('zh', {numeric: true, sensitivity: 'base'});
 const numericConfig = ['water_depth_mm','acrylic_mm','n_water','n_acrylic','n_air','square_mm','mm_per_pixel','edge_crop','filter_ratio','color_limit_mm','fps','temporal_limit_mb'];
 let busyDepth=0;
@@ -18,7 +18,11 @@ function catchAction(fn) { return (...args) => Promise.resolve().then(() => fn(.
 function b64(blob) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result.split(',')[1]); r.onerror = reject; r.readAsDataURL(blob); }); }
 function from64(s, name) { const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0)); return new File([bytes], name, {type:'image/png'}); }
 function loadImage(data) { return new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = () => reject(Error('预览图加载失败')); im.src = 'data:image/png;base64,' + data; }); }
-function refreshRun() { $('run').disabled = state.busy || !state.refData || (!state.video && !dynamicFiles().length); }
+function refreshRun() {
+  $('run').disabled = state.busy || !state.refData || (!state.video && !dynamicFiles().length);
+  $('extract-frames').disabled=state.busy||!state.video;
+  $('extract-frames').hidden=!state.video||!['video','folder'].includes($('workbench').dataset.task);
+}
 function busy(value) {
   busyDepth=Math.max(0,busyDepth+(value?1:-1));
   if ((busyDepth>0)===state.busy) return;
@@ -37,7 +41,7 @@ async function detect() {
   if(location.origin==='https://kotokowa.github.io')candidates.push('http://127.0.0.1:8765');
   for(const base of candidates)try{
     const r=await fetch(base+'/api/info',{signal:AbortSignal.timeout(2000)}),info=r.ok?await r.json():null;
-    if(info?.mode==='local'&&info.protocol===2){state.local=true;state.nativeBase=base;state.nativeGPU=Boolean(info.acceleration?.gpu?.available);break;}
+    if(info?.mode==='local'&&info.protocol===2){state.local=true;state.nativeBase=base;state.nativeGPU=Boolean(info.acceleration?.gpu?.available);state.nativeFeatures=info.features||[];break;}
   }catch{}
   $('engine').textContent = state.local ? (state.nativeGPU?'本机 Python + GPU':'本机 Python 加速') : '浏览器 Python · 本机计算';
   if (state.local&&!state.nativeBase) $('home-link').hidden = true;
@@ -134,12 +138,12 @@ async function chooseGroup(i) {
   if (group.video) { state.files=[]; return importVideo(group.video); }
   state.files=group.files.slice().sort((a,b)=>collator.compare(a.name,b.name));
   setOptions($('reference'),state.files.map((f,i)=>[i,f.name]),'选择静水参考图');
-  const index=state.files.findIndex(f=>refPattern.test(f.name));
-  if (index>=0) { $('reference').value=index; await setReference(state.files[index]); }
+  const candidates=state.files.filter(f=>refPattern.test(f.name));
+  if (candidates.length===1) { $('reference').value=state.files.indexOf(candidates[0]); await setReference(candidates[0]); }
   else if (!state.externalReference) {
     state.refFile=null;state.refData=null;state.image=null;state.roi=null;state.geometry={lines:[],points:[]};state.history=[];
-    $('empty-state').hidden=false;$('ref-info').textContent='当前数据组没有自动识别到静水参考图，请手动选择。';draw();
-    status('已识别图片序列；请从下拉框选择静水参考图，或单独导入。');
+    $('empty-state').hidden=false;$('ref-info').textContent=candidates.length?'多张静水候选，请手动确认。':'未识别到静水图，请手动选择。';draw();
+    status('请从下拉框选择静水参考图，或单独导入。');
   }
   updateCount();
   globalThis.WaterWaveLayout?.refreshControls();
@@ -314,6 +318,26 @@ async function videoFrame(item){
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('视频抽帧超时')),15000);const done=()=>{clearTimeout(timer);v.removeEventListener('seeked',done);resolve();};v.addEventListener('seeked',done);if(Math.abs(v.currentTime-target)<1e-6){done();}else v.currentTime=target;});
   const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);return c.toDataURL('image/png').split(',')[1];
 }
+async function extractFrames(){
+  const video=state.video;if(!video)throw Error('请先导入视频');
+  const items=selectedFrames(),name=video.file.name.replace(/\.[^.]+$/,''),fps=video.fps;
+  if(video.key&&!state.nativeFeatures?.includes('frame_tiff'))throw Error('请升级本机加速器以导出原始 TIFF 帧');
+  warning('');busy(true);state.stop=false;$('progress').max=items.length;$('progress').value=0;
+  let clip,done=0;
+  try{
+    ({clip}=await rpc({op:'clip_begin',name,fps}));
+    for(const item of items){
+      if(state.stop)break;
+      status(`提取 TIFF · ${done+1}/${items.length}`);
+      if(video.key)await rpc({op:'video_extract_frame',clip,video:video.key,index:item.index});
+      else await rpc({op:'clip_frame',clip,index:item.index,data:await videoFrame(item)});
+      $('progress').value=++done;
+    }
+    if(done)await WaterWaveAdvanced.saveArtifact(await rpc({op:'clip_finish',clip,partial:state.stop}),name+'_frames.zip');
+    status(`${state.stop?'已停止 · ':''}已提取 ${done} 张 TIFF`);
+  }finally{try{if(clip)await rpc({op:'clip_dispose',clip});}finally{busy(false);}}
+}
+$('extract-frames').onclick=catchAction(extractFrames);
 async function finish(partial){
   const result=await rpc({op:'finish',session:state.session,partial});
   if(result.field)globalThis.WaterWaveAdvanced?.addField(result.field,state.resultName.replace(/\.zip$/i,''));
