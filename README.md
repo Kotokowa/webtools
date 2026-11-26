@@ -24,12 +24,18 @@ A small static toolbox, published at https://kotokowa.github.io/webtools/.
   amplitude/phase. One Python core runs locally or in a Pyodide worker.
 - **Offline backup:** download `nfc-offline.html`; it bundles the complete
   decoder and works without a server when a saved card URL is pasted into it.
+- **LG鼠标驱动:** a standalone Logitech HID++ configurator at `lg-mouse/`.
+  Start with the G309 LIGHTSPEED USB receiver and use desktop Chrome or Edge.
+  Other mice are probed on connection; a recognized model does not guarantee
+  every setting is available. The protocol and the `src/lg-mouse/` application
+  are distributed under AGPL-3.0-or-later; the other tools retain their licenses.
 
 ## Develop and publish
 
-Node.js 22+, no npm packages needed:
+Node.js 22+:
 
 ```sh
+npm ci
 npm test
 npm run build
 ```

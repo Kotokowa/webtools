@@ -1,0 +1,40 @@
+:root{color-scheme:only light;font-family:system-ui,"Microsoft YaHei",sans-serif;background:#fff;color:#243746}
+*{box-sizing:border-box}
+body{margin:0}
+nav,main,footer{max-width:960px;margin:auto;padding:24px}
+nav{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #dce6ed}
+nav a{text-decoration:none}
+nav .brand{font-weight:700;color:#243746}
+a{color:#176b98;text-underline-offset:4px}
+h1{font-size:clamp(28px,5vw,44px);line-height:1.25;margin:16px 0}
+h2{font-size:20px;margin:0 0 12px}
+h3{font-size:16px;margin:16px 0 8px}
+p{line-height:1.75;margin:8px 0}
+.eyebrow{color:#28779d;font-size:12px;letter-spacing:.15em}
+.lead,.muted,footer{color:#607788}
+.lead{max-width:620px;margin-bottom:24px}
+.muted,#status{font-size:14px;overflow-wrap:anywhere}
+#status[data-error="true"]{color:#9b3333}
+.panel{padding:24px;background:#fff;border:1px solid #dce6ed;border-radius:18px;margin-top:16px;min-width:0}
+.toolbar,.controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.toolbar{margin:12px 0}
+label{font-size:14px;color:#526d80;display:grid;gap:5px}
+button,select,input{font:inherit;max-width:100%}
+button{cursor:pointer;border:1px solid #b5cbd9;border-radius:10px;padding:10px 16px;background:#eef6fb;color:#205a7c}
+button.primary{background:#6cf;color:#102737;border-color:#6cf}
+button:not(:disabled):hover{filter:brightness(1.1)}
+button:disabled{opacity:.5;cursor:not-allowed}
+select,input{background:#f7fafc;color:#243746;border:1px solid #b5cbd9;border-radius:10px;padding:9px 10px;min-width:0}
+input[type="color"]{width:72px;height:40px;padding:4px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:10px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px;margin:0}
+.stats div{background:#f7fafc;border-radius:10px;padding:9px 12px;overflow-wrap:anywhere}
+dt{font-size:12px;color:#526d80}
+dd{margin:2px 0 0}
+fieldset{margin:16px 0 0;padding:0;border:0;min-width:0}
+summary{cursor:pointer;color:#526d80;margin:14px 0 8px}
+details{margin-top:12px}
+footer{border-top:1px solid #dce6ed;font-size:12px;line-height:1.8}
+:focus-visible{outline:2px solid #1874a8;outline-offset:3px}
+[hidden]{display:none!important}
+@media(max-width:480px){nav,main,footer{padding:18px}.panel{padding:16px 12px}.controls label{flex-basis:100%}}

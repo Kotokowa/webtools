@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="浏览器本地配置罗技鼠标：DPI、回报率和板载设置。">
+  <title>LG鼠标驱动 · Kotokowa</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <nav><a class="brand" href="../">Kotokowa / 小工具</a><a href="https://github.com/Kotokowa/webtools/tree/main/src/lg-mouse">源代码 ↗</a></nav>
+  <main>
+    <p class="eyebrow">KOTOKOWA / WEBTOOLS</p>
+    <h1>LG鼠标驱动</h1>
+    <p class="lead">在网页上设置罗技鼠标，无需安装或登录。默认自动识别，连接后只显示设备支持的设置。</p>
+    <section class="panel" aria-labelledby="connect-title">
+      <h2 id="connect-title">连接鼠标</h2>
+      <div class="toolbar controls">
+        <label>连接预设 <select id="model"><option value="">自动识别 · 所有罗技设备</option></select></label>
+        <button id="connect" type="button" class="primary">连接设备</button>
+        <button id="refresh" type="button" hidden>重新读取</button>
+        <button id="disconnect" type="button" hidden>断开</button>
+      </div>
+      <p id="model-help" class="muted">G309 建议先用 LIGHTSPEED USB 接收器。也可尝试其他罗技 HID++ 鼠标。</p>
+      <p id="status" role="status" aria-live="polite">请使用电脑版 Chrome 或 Edge，在弹窗中选择鼠标或接收器。</p>
+    </section>
+    <section id="workspace" hidden aria-label="鼠标设置"></section>
+    <noscript>需要启用 JavaScript 才能连接鼠标。</noscript>
+  </main>
+  <footer>设备数据只在浏览器处理，不上传。非罗技官方工具。<br>协议来自 <a href="https://github.com/OpenMouse-Project/mouse-protocol/tree/088b7dd644663602c53ca92027bb995fb3e65d79">OpenMouse Protocol 源代码</a> · <a href="LICENSE.txt">AGPL-3.0-or-later</a></footer>
+</body>
+</html>

@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { buildSync } = require('esbuild');
 const root = path.join(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const escape = s => s.replace(/<\/script/gi, '<\\/script');
@@ -23,4 +24,14 @@ for (const name of ['__init__.py', 'core.py', 'session.py', 'measurement.py', 'a
   fs.copyFileSync(path.join(root, 'waterwave', name), path.join(waveDest, 'python', name));
 }
 fs.copyFileSync(path.join(root, 'waterwave/LICENSE-FCD.txt'), path.join(waveDest, 'LICENSE-FCD.txt'));
-console.log('Built dist/index.html and self-contained dist/nfc-offline.html.');
+const mouseDest = path.join(root, 'dist/lg-mouse');
+fs.mkdirSync(mouseDest, { recursive: true });
+for (const name of ['index.html', 'style.css']) {
+  fs.copyFileSync(path.join(root, 'src/lg-mouse', name), path.join(mouseDest, name));
+}
+fs.copyFileSync(path.join(root, 'node_modules/@openmouse/protocol/LICENSE'), path.join(mouseDest, 'LICENSE.txt'));
+buildSync({
+  entryPoints: [path.join(root, 'src/lg-mouse/app.mjs')],
+  outfile: path.join(mouseDest, 'app.js'), bundle: true, minify: true, format: 'esm', target: 'chrome100'
+});
+console.log('Built dist/index.html, dist/nfc-offline.html and standalone tools.');

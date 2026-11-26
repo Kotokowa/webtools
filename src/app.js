@@ -4,7 +4,8 @@ const TOOLS = [
   { id: 'nfc', name: 'NFC 卡片解码', tag: '8A · v2 / v3 / v5', description: '从卡片链接还原不同尺寸、多种颜色的字符图和完整留言，兼容旧卡。', mount: mountNfc },
   { id: 'text', name: '文本编码转换', tag: 'UTF-8 · 浏览器本地', description: '在文字、Base64、URL 编码和十六进制之间转换，支持中文。', mount: mountText },
   { id: 'water-wave', name: '水波场恢复', tag: 'FCD · Python 科学计算', description: '从参考棋盘格与动态影像恢复水面高度，框选范围并导出波场、剖面与时间序列。', mount: () => { location.href = 'water-wave/'; } },
-  { id: 'perspective', name: '图片透视裁剪', tag: '四角校正 · 浏览器本地', description: '选出照片中的四个角，拖动微调，将倾斜画面校正为矩形并下载。', mount: mountPerspective }
+  { id: 'perspective', name: '图片透视裁剪', tag: '四角校正 · 浏览器本地', description: '选出照片中的四个角，拖动微调，将倾斜画面校正为矩形并下载。', mount: mountPerspective },
+  { id: 'lg-mouse', name: 'LG鼠标驱动', tag: 'Logitech · WebHID', description: '在浏览器里连接罗技鼠标，查看电量并调整 DPI、回报率和支持的板载设置。', mount: () => { location.href = 'lg-mouse/'; } }
 ];
 const app = document.getElementById('app');
 function el(tag, options = {}, children = []) {

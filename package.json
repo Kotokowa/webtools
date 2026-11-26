@@ -7,5 +7,9 @@
     "build": "node scripts/build.cjs",
     "test": "node --test tests/*.test.cjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": { "node": ">=22" },
+  "devDependencies": {
+    "@openmouse/protocol": "0.62.0",
+    "esbuild": "0.28.2"
+  }
 }
