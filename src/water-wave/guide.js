@@ -14,8 +14,3 @@ function updateCurrent(){
 }
 function schedule(){if(!pending){pending=true;requestAnimationFrame(updateCurrent);}}
 addEventListener('scroll',schedule,{passive:true});addEventListener('resize',schedule);updateCurrent();
-if(globalThis.WATERWAVE_RUNTIME?.offline||['127.0.0.1','localhost','[::1]'].includes(location.hostname)){
- for(const [selector,url] of [['.tools-home','https://kotokowa.github.io/webtools/'],['[href="offline-download.html"]','https://kotokowa.github.io/webtools/water-wave/offline-download.html'],['[href="native-accelerator.zip"]','https://kotokowa.github.io/webtools/water-wave/native-accelerator.zip']]){
-  document.querySelector(selector).href=url;
- }
-}

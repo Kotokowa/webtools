@@ -1,12 +1,14 @@
 'use strict';
-const repository='https://github.com/Kotokowa/webtools';
+const project='Kotokowa/FresnelWaterwave';
+const repository='https://github.com/'+project;
 const platforms={'windows-amd64':'Windows · x64','darwin-amd64':'macOS · Intel','darwin-arm64':'macOS · Apple Silicon','linux-amd64':'Linux · x64','linux-arm64':'Linux · ARM64'};
 async function json(url){const response=await fetch(url,{signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('无法读取发布信息');return response.json();}
 async function showDownloads(){
-  const fallback=json('offline-releases.json');
-  const latest=json('https://api.github.com/repos/Kotokowa/webtools/releases/latest').catch(()=>null);
+  const fallback=json('offline-releases.json').catch(()=>null);
+  const latest=json('https://api.github.com/repos/'+project+'/releases/latest').catch(()=>null);
   const [local,remote]=await Promise.all([fallback,latest]);
   const release=remote&&/^waterwave-v\d+\.\d+\.\d+$/.test(remote.tag_name)?{version:remote.tag_name,assets:remote.assets}:local;
+  if(!release)throw Error('无法读取发布信息');
   const prefix=repository+'/releases/download/'+release.version+'/';
   const label=document.getElementById('release-version'),link=document.createElement('a');link.textContent=release.version;link.href=repository+'/releases/tag/'+release.version;label.replaceChildren('当前发布：',link);
   const gpuAssets=document.getElementById('gpu-packages');

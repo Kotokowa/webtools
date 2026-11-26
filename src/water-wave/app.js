@@ -44,11 +44,6 @@ async function detect() {
     if(info?.mode==='local'&&info.protocol===2){state.local=true;state.nativeBase=base;state.nativeGPU=Boolean(info.acceleration?.gpu?.available);state.nativeFeatures=info.features||[];break;}
   }catch{}
   $('engine').textContent = state.local ? (state.nativeGPU?'本机 Python + GPU':'本机 Python 加速') : '浏览器 Python · 本机计算';
-  if(state.local&&!state.nativeBase){
-    const site='https://kotokowa.github.io/webtools/';
-    $('home-link').href=site;$('accelerator-link').href=site+'water-wave/native-accelerator.zip';
-    if($('offline-link'))$('offline-link').href=site+'water-wave/offline-download.html';
-  }
   const videoExport = document.querySelector('[data-export="video"]');
   videoExport.disabled = !state.local;
   if (!state.local) $('video-note').textContent = 'AVI 使用浏览器内解码并读取帧率；其他视频按输入帧率抽帧。大视频或变帧率视频建议本地版。';

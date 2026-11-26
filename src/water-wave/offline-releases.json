@@ -1,54 +1,54 @@
 {
   "version": "waterwave-v2.2.0",
-  "release": "https://github.com/Kotokowa/webtools/releases/tag/waterwave-v2.2.0",
+  "release": "https://github.com/Kotokowa/FresnelWaterwave/releases/tag/waterwave-v2.2.0",
   "assets": [
     {
       "label": "Windows · x64",
       "name": "waterwave-windows-amd64.zip",
       "size": 45905707,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-windows-amd64.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-windows-amd64.zip"
     },
     {
       "label": "macOS · Intel",
       "name": "waterwave-darwin-amd64.zip",
       "size": 45876006,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-darwin-amd64.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-darwin-amd64.zip"
     },
     {
       "label": "macOS · Apple Silicon",
       "name": "waterwave-darwin-arm64.zip",
       "size": 45700557,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-darwin-arm64.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-darwin-arm64.zip"
     },
     {
       "label": "Linux · x64",
       "name": "waterwave-linux-amd64.zip",
       "size": 45844134,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-linux-amd64.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-linux-amd64.zip"
     },
     {
       "label": "Linux · ARM64",
       "name": "waterwave-linux-arm64.zip",
       "size": 45622460,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-linux-arm64.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-linux-arm64.zip"
     },
     {
       "label": "Windows · x64 · 含 GPU",
       "name": "waterwave-windows-amd64-gpu.zip",
       "size": 47052336,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-windows-amd64-gpu.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-windows-amd64-gpu.zip"
     },
     {
       "label": "Linux · x64 · 含 GPU",
       "name": "waterwave-linux-amd64-gpu.zip",
       "size": 46989291,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-linux-amd64-gpu.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-linux-amd64-gpu.zip"
     },
     {
       "label": "独立 GPU 加速器",
       "name": "waterwave-gpu-accelerator.zip",
       "size": 1142577,
-      "url": "https://github.com/Kotokowa/webtools/releases/download/waterwave-v2.2.0/waterwave-gpu-accelerator.zip"
+      "url": "https://github.com/Kotokowa/FresnelWaterwave/releases/download/waterwave-v2.2.0/waterwave-gpu-accelerator.zip"
     }
   ]
 }

@@ -56,11 +56,9 @@
   $('focal-result').querySelector('.focal-plots').insertAdjacentHTML('beforeend','<details id="focal-profile" class="option-group" hidden><summary>水平 RMS 剖面</summary><img id="focal-profile-image" alt="水平 RMS 剖面与积分范围"></details>');
   $('focal-result').insertAdjacentHTML('beforeend','<div id="focal-summary" class="metrics" hidden></div><details id="full-metrics" class="option-group" hidden><summary>完整指标</summary><pre id="focal-metrics"></pre></details>');
   $('other-actions').insertAdjacentHTML('beforeend','<div id="focus-actions" class="mini-actions" hidden><button id="focus-open" aria-haspopup="dialog" aria-controls="focus-dialog" disabled>选取焦点</button><button id="focus-analyze" class="primary" disabled>分析</button><button id="focus-batch-open" aria-haspopup="dialog" aria-controls="focus-batch-dialog" hidden>批量分析</button><button id="focus-export" disabled>导出 RMS</button></div>');
-  const offline=document.createElement('a');offline.id='offline-link';offline.textContent='离线版';offline.href='offline-download.html';document.querySelector('header nav').append(offline);
+  const offline=document.createElement('a');offline.id='offline-link';offline.textContent='离线版';offline.href='https://kotokowa.github.io/FresnelWaterwave/offline-download.html';document.querySelector('header nav').append(offline);
   if(WATERWAVE_RUNTIME.offline){
-    const home=$('home-link');home.href='https://kotokowa.github.io/webtools/';home.target='_blank';home.rel='noopener';
-    offline.href='https://kotokowa.github.io/webtools/water-wave/offline-download.html';
-    $('accelerator-link').href='https://kotokowa.github.io/webtools/water-wave/native-accelerator.zip';
+    const home=$('home-link');home.target='_blank';home.rel='noopener';
   }
   const entries=[], centers=new Map(), staticOverrides=new Map(), referenceStaticOverrides=new Map();let root, referenceRoot, tasks=[], referenceTasks=[], current=null, commonReference=null, rawFiles=[], rawStatic=null, outputRoot=null, resumeRoot=null;
   const recordIds=['batch-variable','batch-amp','batch-unit','batch-format','static-format','batch-extensions','batch-repeats','batch-start','batch-end','batch-stride','reference-format','reference-static-format','reference-rms-format','focus-half','focus-line','focus-axis-a','focus-axis-b','focus-angle','focus-model','focus-core',...Object.keys(fitInputs),...Object.keys(designInputs)];
